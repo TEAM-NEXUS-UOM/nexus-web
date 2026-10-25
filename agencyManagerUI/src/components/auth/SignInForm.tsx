@@ -1,63 +1,87 @@
 import { useState } from "react";
+import { useNavigate } from "react-router";
 
 function SignInForm() {
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
 
-  return (
-    <div className="max-w-md mx-auto w-full">
-      <div className="flex flex-col gap-4 px-4 h-dvh justify-center max-w-md mx-auto">
-        <h2 className="font-bold text-3xl text-slate-900">Welcome Back</h2>
-        <p>Sign in to your agency workspace</p>
+  const navigate = useNavigate();
 
-        <form action="" className="flex flex-col px-3 py-2 space-y-4">
-          <label htmlFor="workEmail" className="text-slate-700 text-sm">
+  return (
+    <div className="w-full">
+      <div className="mx-auto flex w-full max-w-md flex-col justify-center gap-4 px-6 py-10 sm:px-8 lg:h-dvh lg:py-0 xl:max-w-lg">
+        <h2 className="text-3xl font-bold text-slate-900">Welcome Back</h2>
+        <p className="text-slate-700">Sign in to your agency workspace</p>
+
+        <form
+          className="flex flex-col space-y-4 py-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            navigate("/agency/dashboard", { replace: true });
+          }}
+        >
+          <label htmlFor="workEmail" className="text-sm text-slate-700">
             Work Email
           </label>
           <input
-            type="text"
+            id="workEmail"
+            type="email"
+            autoComplete="email"
             placeholder="manager@nexus.lk"
-            className="px-2 py-2 rounded-lg border "
+            className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-base"
             value={email}
-            onChange={(e)=> setEmail(e.target.value)}
+            onChange={(e) => setEmail(e.target.value)}
             required
           />
 
-          <label htmlFor="password" className="text-slate-700 text-sm ">
+          <label htmlFor="password" className="text-sm text-slate-700">
             Password
           </label>
           <input
+            id="password"
             type="password"
+            autoComplete="current-password"
             placeholder="Enter your password here"
-            className="px-2 py-2 rounded-lg border "
+            className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-base"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
           />
+
+          <section className="flex flex-wrap items-center justify-between gap-2 px-1 py-2">
+            <label
+              htmlFor="remember"
+              className="flex cursor-pointer items-center gap-2"
+            >
+              <input id="remember" type="checkbox" className="h-4 w-4" />
+              <span className="text-sm text-slate-700">Remember Me</span>
+            </label>
+
+            <p className="cursor-pointer text-xs font-bold text-primary">
+              Forgot password?
+            </p>
+          </section>
+
+          <button
+            type="submit"
+            className="w-full cursor-pointer rounded-full bg-primary py-2.5 text-lg font-medium text-white"
+          >
+            Sign In
+          </button>
         </form>
 
-        <section className="flex justify-between px-2 py-2">
-          <label htmlFor="" className="flex gap-2">
-            <input type="checkbox" className="p-1 border-none" />
-            <p className="text-sm text-slate-700">Remember Me</p>
-          </label>
-
-          <p className="text-xs text-primary font-bold  cursor-pointer">Forgot password ? </p>
-        </section>
-
-        <button className=" bg-primary text-white text-xl font-medium py-2 rounded-full cursor-pointer">
-          Sign In
-        </button>
-        <div className="flex flex-col gap-2 items-center justify-center">
-          <p className="text-xs text-slate-700 font-light">
+        <div className="flex flex-col items-center justify-center gap-2">
+          <p className="text-center text-xs font-light text-slate-700">
             Protected access for authorized agency staff
           </p>
 
           <section className="flex gap-2">
-            <p className="text-xs text-slate-800 font-light">
-              Don't have an account ?
+            <p className="text-xs font-light text-slate-800">
+              Don't have an account?
             </p>
-            <p className="text-xs text-primary font-semibold cursor-pointer">Sign Up</p>
+            <p className="cursor-pointer text-xs font-semibold text-primary">
+              Sign Up
+            </p>
           </section>
         </div>
       </div>

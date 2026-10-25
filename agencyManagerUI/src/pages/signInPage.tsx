@@ -3,7 +3,7 @@ import SignInForm from "../components/auth/SignInForm";
 
 function SignInPage() {
   return (
-    <div className="flex flex-col lg:flex-row w-full">
+    <div className="flex min-h-dvh w-full flex-col lg:flex-row">
       <div className="w-full lg:w-1/2">
         <AuthSidePanel />
       </div>

@@ -1,8 +1,8 @@
-import SignInPage from "./pages/signInPage.tsx";
+import AppRoutes from "./routes/AppRoutes.tsx";
 function App() {
   return (
     <div className="">
-      <SignInPage />
+     <AppRoutes />
     </div>
   );
 }
