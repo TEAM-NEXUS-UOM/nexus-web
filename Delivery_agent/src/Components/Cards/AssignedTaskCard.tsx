@@ -11,19 +11,24 @@ interface prop{
 const AssignedTaskCard = ({type}:prop) => {
   const router = useRouter()
   return (
-    <View className='bg-[#DEDEDE] rounded-[24px] p-5 m-3 items-left justify-between'>
+    <View className='bg-[white] rounded-[24px] p-5 m-2 items-left justify-between border-2 border-[#E3E6EB]'>
     
     {type?<><Text className='font-Poppins-Medium text-xl'>Delivery : D099134</Text>
-      <Text className='font-Poppins-Light text-lg'>Area : Katubedda</Text>
-      <Text className='font-Poppins-Light text-lg'>Total Locations : 35</Text>
+    <View className='flex-row justify-between mt-2'>
+    <Text className='font-Poppins-Light text-md'>Area : Katubedda</Text>
+    <Text className='font-Poppins-Light text-md'>Total Locations : 35</Text>
+    </View>
+      
 </>:<><Text className='font-Poppins-Medium text-xl'>Pickup : P099134</Text>
-      <Text className='font-Poppins-Light text-lg'>Location : Kottawa CBL</Text>
-      <Text className='font-Poppins-Light text-lg'>Pickup time : 10:30am</Text>
+<View className='flex-row justify-between mt-2'>
+      <Text className='font-Poppins-Light text-md'>Location : Kottawa CBL</Text>
+      <Text className='font-Poppins-Light text-md'>Pickup time : 10:30am</Text>
+      </View>
 </>}
       
 
 
-      <TouchableOpacity className='bg-[#34C759] my-4 p-2 rounded-[10px]'   onPress={() => {
+      <TouchableOpacity className='bg-[#E6F6EC] my-4 p-2 rounded-[10px]'   onPress={() => {
     if (type) {
       router.push({
         pathname: "/ActiveDeliveryDetails",
@@ -36,7 +41,7 @@ const AssignedTaskCard = ({type}:prop) => {
       });
     }
   }}>
-                    <Text className='text-center font-Poppins-Medium'>View more details</Text>
+                    <Text className='text-center font-Poppins-Medium text-[#11692F]'>View more details</Text>
                   </TouchableOpacity>
       
     

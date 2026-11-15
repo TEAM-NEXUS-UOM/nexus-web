@@ -17,10 +17,10 @@ const CheckInCard = () => {
   });
   return (
     <LinearGradient
-        style={{borderRadius:15,}}       
-        colors={['#3357D9', '#1B2E73']}
+        style={{borderRadius:24,marginHorizontal:2}}       
+        colors={['#2A44D4', '#2A44D4']}
         >
-          <View className='flex-row m-2 p-2 items-center justify-between'>
+          <View className='flex-row m-2 p-4 items-center justify-between'>
           <View className='flex-row items-center'>
           <View className="w-12 h-12 bg-white rounded-full items-center justify-center">
               <MaterialIcons name="person-outline" size={24} color="black" />
@@ -43,23 +43,23 @@ const CheckInCard = () => {
 
           <View className='p-4'>
 
-            <View className='my-3 flex-row'>
+            <View className='my-2 flex-row items-center'>
             <MaterialIcons name="calendar-today" size={18} color="white" />
-            <Text className='font-Poppins-Light text-white pl-2'>{formattedDate}</Text>
+            <Text className='font-Poppins-Medium text-white pl-2 text-lg'>{formattedDate}</Text>
             </View>
 
-          <View className=' flex-row justify-between my-1'>
-            <View className='flex-row'>
-              <Text className='font-Poppins-Light text-white pr-2'>Check-In Time :</Text>
-              <Text className='font-Poppins-Light text-white'>--:--</Text>
+          <View className=' flex-row justify-between my-2'>
+            <View className='flex gap-2'>
+              <Text className='font-Poppins-Light text-white pr-2'>Check-In Time</Text>
+              <Text className='font-Poppins-Medium text-white text-xl'>09:40</Text>
             </View>
-            <View className='flex-row'>
-              <Text className='font-Poppins-Light text-white pr-2'>Check-Out Time :</Text>
-              <Text className='font-Poppins-Light text-white'>--:--</Text>
+            <View className='flex gap-2'>
+              <Text className='font-Poppins-Light text-white pr-2'>Check-Out Time</Text>
+              <Text className='font-Poppins-Medium text-white text-xl'>Not yet</Text>
             </View>
           </View>
-          <TouchableOpacity className={`${isCheckedIn?"bg-[#34C759]":"bg-[#FF383C]"} my-4 p-2 rounded-[10px]`} onPress={checkCheckedIn}>
-              <Text className='text-center font-Poppins-Medium'>{isCheckedIn?"Check-In":"Check-Out"}</Text>
+          <TouchableOpacity className="bg-[white] my-4 p-4 rounded-[14px]" onPress={checkCheckedIn}>
+              <Text className={`${isCheckedIn?"text-[#34C759]":"text-[#FF383C]"} text-center text-xl font-Poppins-SemiBold`}>{isCheckedIn?"Check-In":"Check-Out"}</Text>
             </TouchableOpacity>
           </View>
       </LinearGradient>

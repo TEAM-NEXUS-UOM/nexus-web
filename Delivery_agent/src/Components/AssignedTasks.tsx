@@ -5,7 +5,7 @@ import AssignedTaskCard from './Cards/AssignedTaskCard'
 const AssignedTasks = () => {
   return (
     <View className='mt-4'>
-    <Text className='font-Poppins-Light text-xl'>Tasks assigned for today</Text>
+    <Text className='font-Poppins-Medium text-xl'>Tasks assigned for today</Text>
     <AssignedTaskCard type={1}/>
     <AssignedTaskCard type={0}/>
     

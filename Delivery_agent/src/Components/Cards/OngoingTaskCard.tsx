@@ -12,7 +12,7 @@ const OngoingTaskCard = ({type}:prop) => {
   const router = useRouter();
   
   return (
-    <View className="bg-blue-300 rounded-[24px] p-3 mx-3 my-2 flex-row items-center justify-between">
+    <View className="bg-[white] rounded-[20px] p-3 mx-2 my-2 flex-row items-center justify-between border-2 border-[#E3E6EB]">
 
   <View className="p-2 mr-2">
     <Text className="font-Poppins-Medium text-xl w-[200px]"
@@ -40,10 +40,10 @@ const OngoingTaskCard = ({type}:prop) => {
   }}
 >
     <Progress.Circle
-      size={60}
+      size={70}
       progress={0.9}
-      thickness={2}
-      color="#222222"
+      thickness={4}
+      color="#2A44D4"
       unfilledColor="#D1D5DB"
       borderWidth={0}
       showsText

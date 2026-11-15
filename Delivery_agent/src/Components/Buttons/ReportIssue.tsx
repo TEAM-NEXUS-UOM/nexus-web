@@ -4,13 +4,13 @@ import React from 'react'
 const ReportIssue = () => {
   return (
     <TouchableOpacity
-  className="bg-[#FF8D28] my-2 p-3 rounded-[10px] w-full"
-  onPress={() => console.log("Pressed")}
->
-  <Text className="text-center font-Poppins-Medium">
-    Report an issue
-  </Text>
-</TouchableOpacity>
+    className="bg-[#FFCCCC] my-2 p-3 rounded-[14px] w-full"
+    onPress={() => console.log("Pressed")}
+  >
+    <Text className="text-center font-Poppins-Medium text-[#B91C1C]">
+      Report an issue
+    </Text>
+  </TouchableOpacity>
   )
 }
 
