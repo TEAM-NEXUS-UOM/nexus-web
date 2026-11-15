@@ -8,11 +8,8 @@ function StockOverview({ records }: StockOverviewProps) {
   return (
     <section className="panel stock-panel">
       <div className="panel-heading">
-        <div>
-          <h2>Manufacturing stock</h2>
-          <p>Factory baseline and low-stock products</p>
-        </div>
-        <span className="panel-count">{records.length} monitored SKUs</span>
+      <div><h2>Manufacturing stock</h2></div>
+      <span className="panel-count">{records.length} monitored SKUs</span>
       </div>
       <div className="stock-table-wrap">
         <table className="stock-table">
@@ -32,10 +29,10 @@ function StockOverview({ records }: StockOverviewProps) {
                 <th scope="row">
                   {record.id} · {record.product}
                 </th>
-                <td>On-hand {record.onHand}</td>
-                <td>Reserved {record.reserved}</td>
-                <td>Available {record.available}</td>
-                <td>Threshold {record.threshold}</td>
+                <td>{record.onHand}</td>
+                <td>{record.reserved}</td>
+                <td>{record.available}</td>
+                <td>{record.threshold}</td>
               </tr>
             ))}
           </tbody>

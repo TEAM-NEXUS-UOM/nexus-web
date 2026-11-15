@@ -20,7 +20,6 @@ export type WorkspacePage =
   | 'notification-preferences'
   | 'warehouse-handover'
   | 'reports-orders'
-  | 'reports-handover'
   | 'account-preferences'
 
 interface SidebarProps {
@@ -28,7 +27,7 @@ interface SidebarProps {
   onNavigate: (page: WorkspacePage) => void
 }
 
-export type NavigationIcon = 'chart' | 'warehouse' | 'document' | 'document-check' | 'cube' | 'grid' | 'bell' | 'settings'
+export type NavigationIcon = 'chart' | 'warehouse' | 'document' | 'document-check' | 'cube' | 'grid' | 'bell' | 'settings' | 'clipboard' | 'truck' | 'handover' | 'sliders' | 'bell-alert'
 
 const navGroups = [
   {
@@ -36,7 +35,7 @@ const navGroups = [
     items: [
       { label: 'Dashboard', icon: 'grid' as const, page: 'dashboard' as const },
       { label: 'SAP Requirements', icon: 'cube' as const, page: 'sap' as const },
-      { label: 'Upcoming Orders', icon: 'chart' as const, page: 'orders' as const },
+      { label: 'Upcoming Orders', icon: 'clipboard' as const, page: 'orders' as const },
       { label: 'Manufacturing Stocks', icon: 'document-check' as const, page: 'stocks' as const },
     ],
   },
@@ -45,7 +44,6 @@ const navGroups = [
     items: [
       { label: 'Shipment Schedules', icon: 'document' as const, page: 'shipment-schedules' as const },
       { label: 'Agency Management', icon: 'warehouse' as const, page: 'agency' as const },
-      { label: 'Warehouse Handover', icon: 'chart' as const, page: 'warehouse-handover' as const },
     ],
   },
   {
@@ -55,8 +53,8 @@ const navGroups = [
   {
     label: 'SETTINGS',
     items: [
-      { label: 'Settings', icon: 'settings' as const, page: 'account-preferences' as const },
-      { label: 'Notifications', icon: 'bell' as const, page: 'notifications' as const },
+      { label: 'Settings', icon: 'sliders' as const, page: 'account-preferences' as const },
+      { label: 'Notifications', icon: 'bell-alert' as const, page: 'notifications' as const },
     ],
   },
 ]
@@ -113,6 +111,41 @@ export function NavigationIconGraphic({ icon }: { icon: NavigationIcon }) {
         <path d="m19.4 15 .1.1 1.4 1.1-1.4 2.4-1.7-.7a8 8 0 0 1-1.8 1l-.3 1.8h-2.8l-.3-1.8a8 8 0 0 1-1.8-1l-1.7.7-1.4-2.4 1.4-1.1a7 7 0 0 1 0-2l-1.4-1.1 1.4-2.4 1.7.7a8 8 0 0 1 1.8-1l.3-1.8h2.8l.3 1.8a8 8 0 0 1 1.8 1l1.7-.7 1.4 2.4-1.4 1.1a7 7 0 0 1 0 1.9Z" transform="translate(-1 -1)" />
       </>
     ),
+    clipboard: (
+      <>
+        <rect x="5" y="5" width="14" height="16" rx="2" />
+        <path d="M9 5V3h6v2M8 10h8m-8 4h8m-8 4h5" />
+      </>
+    ),
+    truck: (
+      <>
+        <path d="M3 6h11v11H3zM14 10h4l3 3v4h-7z" />
+        <circle cx="7.5" cy="18" r="1.5" />
+        <circle cx="17.5" cy="18" r="1.5" />
+      </>
+    ),
+    handover: (
+      <>
+        <path d="M4 7h6l2 2h8v10H4z" />
+        <path d="m8 13 2-2 2 2m4 0-2 2-2-2m-2 0h4" />
+      </>
+    ),
+    sliders: (
+      <>
+        <path d="M4 6h7m4 0h5M4 12h3m4 0h9M4 18h9m4 0h3" />
+        <circle cx="13" cy="6" r="2" />
+        <circle cx="9" cy="12" r="2" />
+        <circle cx="15" cy="18" r="2" />
+      </>
+    ),
+    'bell-alert': (
+      <>
+        <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h12" />
+        <path d="M10 21h4" />
+        <circle cx="19" cy="17" r="3" />
+        <path d="M19 15.7v1.6m0 1.1h.01" />
+      </>
+    ),
   }
 
   return (
@@ -125,23 +158,20 @@ export function NavigationIconGraphic({ icon }: { icon: NavigationIcon }) {
 function Sidebar({ activePage, onNavigate }: SidebarProps) {
   return (
     <aside className="sidebar">
-      <a className="brand" href="#" aria-label="FreightFlow dashboard">
-        <span className="brand-mark" aria-hidden="true">
-          F
-        </span>
+      <div className="brand">
+        <span className="brand-mark" aria-hidden="true">N</span>
         <span className="brand-copy">
-          <strong>FreightFlow</strong>
-          <span>Manufacturing administration</span>
+          <strong>Nexus</strong>
+          <span>Manufacturer Admin</span>
         </span>
-      </a>
-
+      </div>
       <nav className="primary-navigation" aria-label="Main navigation">
         {navGroups.map((group) => (
           <div className="nav-group" key={group.label}>
             <h2>{group.label}</h2>
             {group.items.map((item) => (
               <button
-                className={`nav-link${activePage === item.page || (activePage === 'sap-detail' && item.page === 'sap') || (activePage === 'adjustment' && item.page === 'stocks') || (['stock-movements', 'production-entry'].includes(activePage) && item.page === 'stocks') || (['shipment-create', 'shipment-review', 'shipment-saved', 'shipment-detail'].includes(activePage) && item.page === 'shipment-schedules') || (activePage === 'notification-preferences' && item.page === 'notifications') || (['reports-orders', 'reports-handover'].includes(activePage) && item.page === 'reports') || (activePage === 'account-preferences' && item.page === 'account-preferences') ? ' is-active' : ''}`}
+                className={`nav-link${activePage === item.page || (activePage === 'sap-detail' && item.page === 'sap') || (activePage === 'adjustment' && item.page === 'stocks') || (['stock-movements', 'production-entry'].includes(activePage) && item.page === 'stocks') || (['shipment-create', 'shipment-review', 'shipment-saved', 'shipment-detail'].includes(activePage) && item.page === 'shipment-schedules') || (activePage === 'notification-preferences' && item.page === 'notifications') || (activePage === 'account-preferences' && item.page === 'account-preferences') ? ' is-active' : ''}`}
                 type="button"
                 onClick={() => onNavigate(item.page)}
                 aria-current={activePage === item.page ? 'page' : undefined}
@@ -154,12 +184,6 @@ function Sidebar({ activePage, onNavigate }: SidebarProps) {
           </div>
         ))}
       </nav>
-
-      <section className="help-card" aria-label="Help">
-        <strong>Need a hand?</strong>
-        <p>Visit the help center for tips</p>
-        <button type="button">Open help center</button>
-      </section>
     </aside>
   )
 }

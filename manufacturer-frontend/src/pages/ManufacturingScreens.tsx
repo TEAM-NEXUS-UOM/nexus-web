@@ -1,6 +1,10 @@
 import { useMemo, useState } from 'react'
 import type { WorkspacePage } from '../components/layout/Sidebar'
 import type { ReactNode } from 'react'
+import ReportTabs from '../components/layout/ReportTabs'
+import StockDistributionPie from '../components/dashboard/StockDistributionPie'
+import { stockRecords as warehouseStockRecords } from '../data/dashboardData'
+import { shipmentSchedules } from '../data/shipmentSchedules'
 
 interface ManufacturingScreensProps {
   page: Exclude<WorkspacePage, 'dashboard'>
@@ -25,12 +29,12 @@ const sapReports = [
 ]
 
 const products = [
-  { id: 'MC-BIS-001', name: 'Cream Cracker', size: '200g', onHand: 12400, reserved: 2400, available: 10000 },
-  { id: 'MC-BIS-002', name: 'Chocolate Cream', size: '150g', onHand: 6800, reserved: 1200, available: 5600 },
-  { id: 'MC-BIS-003', name: 'Lemon Puff', size: '120g', onHand: 5200, reserved: 4500, available: 700 },
-  { id: 'MC-BIS-004', name: 'Nice', size: '100g', onHand: 5400, reserved: 800, available: 4600 },
-  { id: 'MC-BIS-005', name: 'Milk Marie', size: '', onHand: 1000, reserved: 800, available: 200 },
-  { id: 'MC-BIS-006', name: 'Tikir Marie', size: '150g', onHand: 2500, reserved: 2100, available: 400 },
+  { id: 'MC-BIS-001', name: 'Cream Cracker', size: '200g', onHand: 12400, reserved: 2400, available: 10000, threshold: 8000 },
+  { id: 'MC-BIS-002', name: 'Chocolate Cream', size: '150g', onHand: 6800, reserved: 1200, available: 5600, threshold: 1000 },
+  { id: 'MC-BIS-003', name: 'Lemon Puff', size: '120g', onHand: 5200, reserved: 4500, available: 700, threshold: 1000 },
+  { id: 'MC-BIS-004', name: 'Nice', size: '100g', onHand: 5400, reserved: 800, available: 4600, threshold: 3000 },
+  { id: 'MC-BIS-005', name: 'Milk Marie', size: '', onHand: 1000, reserved: 800, available: 200, threshold: 500 },
+  { id: 'MC-BIS-006', name: 'Tikir Marie', size: '150g', onHand: 2500, reserved: 2100, available: 400, threshold: 500 },
 ]
 
 const history = [
@@ -93,7 +97,13 @@ function SapList({ onNavigate }: ManufacturingScreensProps) {
           <select aria-label="Filter by received date"><option>All received dates</option><option>18 Oct 2026</option><option>17 Oct 2026</option></select>
           <select aria-label="Filter by reviewer"><option>All reviewers</option><option>Ayesha M.</option></select>
           <button className="button" type="button" onClick={() => setQuery('')}>☷ Filters</button>
-          <label className="button button-primary upload-button">➜ Upload SAP report<input type="file" accept=".xlsx,.xls,.csv" onChange={(event) => setUploadedName(event.target.files?.[0]?.name ?? '')} /></label>
+          <label className="button button-primary upload-button">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 16V4m0 0L7 9m5-5 5 5M5 14v5h14v-5" />
+            </svg>
+            Upload SAP Doc
+            <input type="file" accept=".xlsx,.xls,.csv" onChange={(event) => setUploadedName(event.target.files?.[0]?.name ?? '')} />
+          </label>
         </div>
         {uploadedName && <p className="inline-notice">Selected report: {uploadedName}. Source data is not imported until reviewed.</p>}
         <div className="responsive-table">
@@ -133,7 +143,7 @@ function SapDetail({ onNavigate }: ManufacturingScreensProps) {
         </Panel>
       </div>
       <div className="screen-actions"><button className="button" type="button" onClick={() => onNavigate('sap')}>Back to SAP requirements</button><button className="button button-primary" type="button" onClick={() => onNavigate('orders')}>Review source</button></div>
-      <div className="screen-footnote"><span>FreightFlow · Manufacturing administration</span><span>Manufacturer-side review only</span></div>
+      <div className="screen-footnote"><span>Manufacturer-side review only</span></div>
     </main>
   )
 }
@@ -161,30 +171,82 @@ function OrderDetails({ onNavigate }: ManufacturingScreensProps) {
         </Panel>
       </div>
       <div className="screen-actions"><button className="button" type="button" onClick={() => onNavigate('orders')}>Back to upcoming orders</button><button className="button button-primary" type="button" onClick={() => onNavigate('sap-detail')}>Review SAP source</button></div>
-      <div className="screen-footnote"><span>FreightFlow · Manufacturing administration</span><span>Manufacturer-side review only</span></div>
+      <div className="screen-footnote"><span>Manufacturer-side review only</span></div>
     </main>
   )
 }
 
 function ProductDetails({ onNavigate }: ManufacturingScreensProps) {
-  const product = products[0]
+  const [productQuery, setProductQuery] = useState('')
+  const [sortBy, setSortBy] = useState('name')
+  const [selectedProductId, setSelectedProductId] = useState(products[0].id)
+  const product = products.find((item) => item.id === selectedProductId) ?? products[0]
+  const visibleProducts = useMemo(() => {
+    const query = productQuery.trim().toLowerCase()
+    return products
+      .filter((item) => `${item.id} ${item.name}`.toLowerCase().includes(query))
+      .sort((first, second) => sortBy === 'stock-high'
+        ? second.onHand - first.onHand
+        : sortBy === 'stock-low'
+          ? first.onHand - second.onHand
+          : first.name.localeCompare(second.name))
+  }, [productQuery, sortBy])
+
   return (
     <main className="dashboard-content screen-content">
+      <div className="warehouse-stock-layout">
+        <Panel title="Current warehouse stocks">
+          <div className="product-directory-toolbar">
+            <label className="screen-search">
+              <span aria-hidden="true">⌕</span>
+              <span className="visually-hidden">Search products</span>
+              <input value={productQuery} onChange={(event) => setProductQuery(event.target.value)} placeholder="Search products or SKU..." />
+            </label>
+            <label className="visually-hidden" htmlFor="stock-sort">Sort products</label>
+            <select id="stock-sort" value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
+              <option value="name">Sort: Product name</option>
+              <option value="stock-high">Sort: Stock high to low</option>
+              <option value="stock-low">Sort: Stock low to high</option>
+            </select>
+          </div>
+          <div className="responsive-table">
+            <table className="warehouse-stock-table">
+              <thead><tr><th>SKU · Product</th><th>On-hand</th><th>Available</th><th>Threshold</th></tr></thead>
+              <tbody>
+                {visibleProducts.map((item) => (
+                  <tr key={item.id}>
+                    <td><button className="product-select-button" type="button" onClick={() => setSelectedProductId(item.id)}>{item.id} · {item.name}</button></td>
+                    <td>{number(item.onHand)}</td>
+                    <td>{number(item.available)}</td>
+                    <td>{number(item.threshold)}</td>
+                  </tr>
+                ))}
+                {visibleProducts.length === 0 && <tr><td colSpan={4}>No products match your search.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </Panel>
+        <StockDistributionPie records={warehouseStockRecords} />
+      </div>
       <div className="screen-intro"><div className="intro-actions"><button className="button" type="button" onClick={() => onNavigate('stocks')}>← Back to products</button><button className="button" type="button" onClick={() => onNavigate('production-entry')}>Record quantity</button><button className="button" type="button" onClick={() => onNavigate('adjustment')}>Adjust stock</button></div></div>
       <section className="product-summary screen-panel">
-        <div className="product-summary-heading"><div><strong>MC-BIS-001 · Cream Cracker</strong><p>Product master record · Manufacturing Admin review queue · Illustrative data</p></div><span className="status-chip">Active</span><strong className="threshold-copy">Stock threshold 8000</strong></div>
-        <div className="product-facts">{[['Product name', product.name, 'MC-BIS-001 · 200g'], ['Category', 'Biscuits', 'Standard factory SKU'], ['Packaging', '200g · 24 units / case', 'Standard retail pack'], ['Last production', '17 Oct 2026 · 10:30 AM', 'Batch MC-BIS-001-20261017']].map(([label, value, detail]) => <div key={label}><span>{label}</span><strong>{value}</strong><small>{detail}</small></div>)}</div>
+        <div className="product-summary-heading"><div><strong>{product.id} · {product.name}</strong><p>Product master record · Manufacturing Admin review queue · Illustrative data</p></div><span className="status-chip">Active</span><strong className="threshold-copy">Stock threshold {number(product.threshold)}</strong></div>
+        <div className="product-facts">{[['Product name', product.name, `${product.id}${product.size ? ` · ${product.size}` : ''}`], ['Category', 'Biscuits', 'Standard factory SKU'], ['Packaging', product.size || 'Not specified', 'Standard retail pack'], ['Last production', '17 Oct 2026 · 10:30 AM', `Batch ${product.id}-20261017`]].map(([label, value, detail]) => <div key={label}><span>{label}</span><strong>{value}</strong><small>{detail}</small></div>)}</div>
       </section>
-      <section className="summary-grid stock-metrics">{[['On-hand stock', '12,400', 'Current factory stock'], ['Reserved', '2,400', 'Allocated to scheduled shipments'], ['Available', '10,000', 'Available manufacturing stock'], ['Threshold', '8,000', 'Safety stock trigger']].map(([label, value, description]) => <article className="summary-card" key={label}><h2>{label}</h2><p className="summary-value">{value}</p><p className="summary-description">{description}</p></article>)}</section>
+      <section className="summary-grid stock-metrics">{[['On-hand stock', number(product.onHand), 'Current factory stock'], ['Reserved', number(product.reserved), 'Allocated to scheduled shipments'], ['Available', number(product.available), 'Available manufacturing stock'], ['Threshold', number(product.threshold), 'Safety stock trigger']].map(([label, value, description]) => <article className="summary-card" key={label}><h2>{label}</h2><p className="summary-value">{value}</p><p className="summary-description">{description}</p></article>)}</section>
       <Panel title="Manufactured quantity history">
         <div className="history-heading"><p>Illustrative production records for the last 30 days.</p><button className="button" type="button" onClick={() => onNavigate('stock-movements')}>↗ View stock movements</button></div>
-        <div className="responsive-table"><table className="screen-table"><thead><tr><th>Date</th><th>Batch</th><th>Produced</th><th>Reserved</th><th>Available</th><th>Status</th></tr></thead><tbody>
-          {[
-            ['17 Oct 2026', 'MC-BIS-001-20261017', '2,400', '2,400', '10,000'],
-            ['14 Oct 2026', 'MC-BIS-001-20261014', '2,100', '1,800', '7,300'],
-            ['11 Oct 2026', 'MC-BIS-001-20261011', '2,000', '1,200', '5,500'],
-          ].map(([date, batch, produced, reserved, available]) => <tr key={batch}><td><strong>{date}</strong></td><td>{batch}</td><td>{produced}</td><td>{reserved}</td><td>{available}</td><td><span className="status-chip">Completed</span></td></tr>)}
-        </tbody></table></div>
+        {product.id === 'MC-BIS-001' ? (
+          <div className="responsive-table"><table className="screen-table"><thead><tr><th>Date</th><th>Batch</th><th>Produced</th><th>Reserved</th><th>Available</th><th>Status</th></tr></thead><tbody>
+            {[
+              ['17 Oct 2026', 'MC-BIS-001-20261017', '2,400', '2,400', '10,000'],
+              ['14 Oct 2026', 'MC-BIS-001-20261014', '2,100', '1,800', '7,300'],
+              ['11 Oct 2026', 'MC-BIS-001-20261011', '2,000', '1,200', '5,500'],
+            ].map(([date, batch, produced, reserved, available]) => <tr key={batch}><td><strong>{date}</strong></td><td>{batch}</td><td>{produced}</td><td>{reserved}</td><td>{available}</td><td><span className="status-chip">Completed</span></td></tr>)}
+          </tbody></table></div>
+        ) : (
+          <p className="empty-inline">No illustrative production history is available for {product.name}.</p>
+        )}
       </Panel>
     </main>
   )
@@ -192,12 +254,6 @@ function ProductDetails({ onNavigate }: ManufacturingScreensProps) {
 
 function Reports({ onNavigate }: ManufacturingScreensProps) {
   const [productFilter, setProductFilter] = useState('All manufacturing products')
-  const reportTabs: { label: string; page: WorkspacePage }[] = [
-    { label: 'Orders', page: 'reports-orders' },
-    { label: 'Stock', page: 'reports' },
-    { label: 'Schedules', page: 'shipment-schedules' },
-    { label: 'Handover', page: 'reports-handover' },
-  ]
   const displayedHistory = useMemo(() => productFilter === 'All manufacturing products' ? history : history.filter((row) => row.product.includes(productFilter)), [productFilter])
   const totals = displayedHistory.reduce(
     (sum, row) => ({
@@ -217,12 +273,8 @@ function Reports({ onNavigate }: ManufacturingScreensProps) {
   }
   return (
     <main className="dashboard-content screen-content">
+      <ReportTabs page="reports" onNavigate={onNavigate} />
       <Panel title="Manufacturing history">
-        <div className="tab-list" role="tablist" aria-label="Report type">
-          {reportTabs.map(({ label, page }) => (
-            <button className={page === 'reports' ? 'active-tab' : ''} type="button" role="tab" aria-selected={page === 'reports'} key={label} onClick={() => page !== 'reports' && onNavigate(page)}>{label}</button>
-          ))}
-        </div>
         <div className="filter-grid"><label>Date range · SLST<input type="text" defaultValue="18 Oct 2026 – 20 Oct 2026" /></label><label>Product<select value={productFilter} onChange={(event) => setProductFilter(event.target.value)}><option>All manufacturing products</option>{products.map((item) => <option key={item.id}>{item.name}</option>)}</select></label></div>
         <div className="report-actions"><button className="button button-primary" type="button">Apply filters</button><button className="button" type="button" onClick={() => setProductFilter('All manufacturing products')}>Reset</button><button className="button" type="button" onClick={exportCsv}>Export CSV</button><button className="button" type="button" onClick={() => window.print()}>Export PDF</button></div>
         <div className="responsive-table"><table className="screen-table"><thead><tr><th>Snapshot date</th><th>Product / SKU</th><th>On-hand</th><th>Reserved</th><th>Available</th><th>Source</th></tr></thead><tbody>
@@ -231,7 +283,7 @@ function Reports({ onNavigate }: ManufacturingScreensProps) {
         </tbody></table></div>
         <p className="footnote">{displayedHistory.length + 1} snapshot rows · All quantities in units · Available = on-hand − reserved · Baseline precedes illustrative action states.</p>
       </Panel>
-      <div className="screen-footnote"><span>FreightFlow · Manufacturing administration</span><span>Static action state · Factory-owned stock only</span></div>
+      <div className="screen-footnote"><span>Static action state · Factory-owned stock only</span></div>
     </main>
   )
 }
@@ -267,7 +319,7 @@ function StockAdjustment({ onNavigate }: ManufacturingScreensProps) {
           <div className="notice-box"><strong>Reserved stock protected</strong><p>An adjustment must also leave enough on-hand stock to cover the existing {number(selectedProduct.reserved)} reserved units.</p></div>
         </Panel>
       </div>
-      <div className="screen-footnote"><span>FreightFlow · Manufacturing administration</span><span>Static action state · Factory-owned stock only</span></div>
+      <div className="screen-footnote"><span>Static action state · Factory-owned stock only</span></div>
     </main>
   )
 }
@@ -304,7 +356,7 @@ function StockMovements({ onNavigate }: ManufacturingScreensProps) {
         <div className="notice-box selected-entry"><strong>Selected entry · {selected.id}</strong><p>{selected.details}</p>{selected.id === 'PRD-1062' && <button className="text-button" type="button" onClick={() => onNavigate('production-entry')}>Open production entry</button>}{selected.id === 'ADJ-0106' && <button className="text-button" type="button" onClick={() => onNavigate('adjustment')}>Open stock adjustment</button>}</div>
         <p className="footnote">{visibleEntries.length} entries shown · Illustrative stock ledger · No transport execution or warehouse receiving operations.</p>
       </Panel>
-      <div className="screen-footnote"><span>FreightFlow · Manufacturing administration</span><span>Static action state · Factory-owned stock only</span></div>
+      <div className="screen-footnote"><span>Static action state · Factory-owned stock only</span></div>
     </main>
   )
 }
@@ -337,27 +389,17 @@ function ProductionEntry({ onNavigate }: ManufacturingScreensProps) {
           <p className="body-copy">This illustration adds {valid ? number(quantityValue) : '0'} units from the manufacturing production entry.</p>
         </Panel>
       </div>
-      <div className="screen-footnote"><span>FreightFlow · Manufacturing administration</span><span>Static action state · Factory-owned stock only</span></div>
+      <div className="screen-footnote"><span>Static action state · Factory-owned stock only</span></div>
     </main>
   )
 }
 
-const schedules = [
-  ['SCH-2048', 'Cream Cracker 200g', 'Kandy Shop 014', '2,400', '20 Oct'],
-  ['SCH-2049', 'Chocolate Cream 150g', 'Gampaha Shop 006', '1,200', '21 Oct'],
-  ['SCH-2050', 'Lemon Puff 120g', 'Colombo Shop 021', '3,000', '22 Oct'],
-  ['SCH-2051', 'Nice 100g', 'Kurunegala Shop 003', '800', '23 Oct'],
-  ['SCH-2052', 'Tikir Marie 150g', 'Negombo Shop 011', '1,600', '24 Oct'],
-]
-
-function selectSchedule(row: string[], props: ManufacturingScreensProps) {
-  const product = products.find((item) => row[1].startsWith(item.name))
-  const day = row[4].match(/\d+/)?.[0] ?? '23'
-  props.onSelectSchedule(row[0])
+function selectSchedule(schedule: (typeof shipmentSchedules)[number], props: ManufacturingScreensProps) {
+  props.onSelectSchedule(schedule.id)
   props.onScheduleDraftChange({
-    productId: product?.id ?? products[3].id,
-    pickupDate: `2026-10-${day.padStart(2, '0')}`,
-    quantity: row[3].replaceAll(',', ''),
+    productId: schedule.productCode,
+    pickupDate: schedule.plannedDate,
+    quantity: String(schedule.quantity),
     notes: '',
   })
 }
@@ -366,15 +408,28 @@ function ShipmentSchedules(props: ManufacturingScreensProps) {
   const { onNavigate } = props
   const [query, setQuery] = useState('')
   const [productFilter, setProductFilter] = useState('All products')
-  const filtered = schedules.filter((row) => `${row.join(' ')} Scheduled`.toLowerCase().includes(query.toLowerCase()) && (productFilter === 'All products' || row[1].startsWith(productFilter)))
+  const filtered = shipmentSchedules.filter((schedule) => `${schedule.id} ${schedule.productName} ${schedule.destination} ${schedule.quantity} ${schedule.plannedDate} ${schedule.status}`.toLowerCase().includes(query.toLowerCase()) && (productFilter === 'All products' || schedule.productName.startsWith(productFilter)))
   return (
     <main className="dashboard-content screen-content">
+      <ReportTabs page="shipment-schedules" onNavigate={onNavigate} />
       <div className="screen-intro"><button className="button button-primary" type="button" onClick={() => onNavigate('shipment-create')}>➜ Create shipment schedule</button></div>
       <section className="summary-grid">{[['Planned next pickup date', '20 Oct', 'Planned next manufacturer pickup'], ['Required quantity', '2,400', 'Units scheduled for next pickup'], ['Scheduled products', '5', 'Products included in next pickup'], ['Scheduled lines', '24', 'Manufacturer-owned schedule lines']].map(([label, value, description]) => <article className="summary-card" key={label}><h2>{label}</h2><p className="summary-value">{value}</p><p className="summary-description">{description}</p></article>)}</section>
       <Panel title="Manufacturer shipment schedules">
         <div className="table-toolbar"><label className="screen-search"><span aria-hidden="true">⌕</span><span className="visually-hidden">Search schedules</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search product, shop, or schedule ID" /></label><select aria-label="Pickup date"><option>Next pickup date</option><option>20 Oct</option><option>23 Oct</option></select><select aria-label="Filter by product" value={productFilter} onChange={(event) => setProductFilter(event.target.value)}><option>All products</option>{products.map((product) => <option key={product.id}>{product.name}</option>)}</select><button className="button" type="button" onClick={() => { setQuery(''); setProductFilter('All products') }}>☷ Filters</button></div>
-        <div className="responsive-table"><table className="screen-table"><thead><tr><th>Schedule ID</th><th>Product</th><th>Shop</th><th>Req. qty</th><th>Next pickup</th><th>Status</th><th>Action</th></tr></thead><tbody>{filtered.map((row) => <tr key={row[0]}><td><strong>{row[0]}</strong></td><td>{row[1]}</td><td>{row[2]}</td><td>{row[3]}</td><td>{row[4]}</td><td>Scheduled</td><td><button className="text-button" type="button" onClick={() => { selectSchedule(row, props); onNavigate('shipment-create') }}>Edit</button>　<button className="text-button" type="button" onClick={() => { selectSchedule(row, props); onNavigate('shipment-detail') }}>View details</button></td></tr>)}</tbody></table></div>
+        <div className="responsive-table"><table className="screen-table"><thead><tr><th>Schedule ID</th><th>Product</th><th>Shop</th><th>Req. qty</th><th>Next pickup</th><th>Status</th><th>Action</th></tr></thead><tbody>{filtered.map((schedule) => <tr key={schedule.id}><td><strong>{schedule.id}</strong></td><td>{schedule.productName}</td><td>{schedule.destination}</td><td>{number(schedule.quantity)}</td><td>{new Date(`${schedule.plannedDate}T00:00:00`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}</td><td>{schedule.status}</td><td><button className="text-button" type="button" onClick={() => { selectSchedule(schedule, props); onNavigate('shipment-create') }}>Edit</button>　<button className="text-button" type="button" onClick={() => { selectSchedule(schedule, props); onNavigate('shipment-detail') }}>View details</button></td></tr>)}</tbody></table></div>
         <div className="table-footer">Showing 1–{filtered.length} of 24 manufacturer schedule lines <span>‹　<strong>1</strong>　›</span></div>
+        <section className="combined-handover-history" aria-labelledby="combined-handover-title">
+          <div className="combined-handover-heading">
+            <h3 id="combined-handover-title">Handover history</h3>
+            <span className="status-chip">No verified records</span>
+          </div>
+          <div className="responsive-table">
+            <table className="screen-table">
+              <thead><tr><th>Schedule ID</th><th>Product</th><th>Quantity</th><th>Planned date</th><th>Sent date</th><th>Status</th></tr></thead>
+            </table>
+          </div>
+          <div className="empty-state report-empty"><strong>No verified handover records</strong></div>
+        </section>
       </Panel>
     </main>
   )
@@ -403,7 +458,7 @@ function ShipmentCreate({ onNavigate, scheduleDraft, onScheduleDraftChange }: Ma
           <p className="body-copy">Next: review the schedule, then record the manufacturer-side warehouse handover.</p>
         </Panel>
       </div>
-      <div className="screen-footnote"><span>FreightFlow · Manufacturing administration</span><span>Static action state · Factory-owned stock only</span></div>
+      <div className="screen-footnote"><span>Static action state · Factory-owned stock only</span></div>
     </main>
   )
 }
@@ -441,7 +496,7 @@ function ShipmentSaved({ onNavigate, scheduleDraft, selectedScheduleId }: Manufa
         <Panel title={`${selectedScheduleId} · Scheduled`}>
           <div className="notice-box"><strong>Illustrative schedule saved</strong><p>No live schedule was created or changed.</p></div>
           <KeyValueRows rows={ [['Product', product.name], ['SKU', product.id], ['Next pickup date', pickupDate], ['Required quantity', `${number(Number(scheduleDraft.quantity))} units`], ['Shipment status', 'Scheduled'], ['Factory on-hand', `${number(product.onHand)} units · unchanged`], ['Reserved / available', `${number(product.reserved)} / ${number(product.available)} units`]] } />
-          <div className="review-buttons"><span className="footnote">Illustrative state only</span><div><button className="button" type="button" onClick={() => onNavigate('shipment-create')}>Edit schedule</button><button className="button button-primary" type="button" onClick={() => onNavigate('shipment-schedules')}>Back to schedules</button></div></div>
+          <div className="review-buttons"><span className="footnote">Illustrative state only</span><div><button className="button" type="button" onClick={() => onNavigate('shipment-create')}>Edit schedule</button><button className="button" type="button" onClick={() => onNavigate('shipment-schedules')}>Back to schedules</button><button className="button button-primary" type="button" onClick={() => onNavigate('warehouse-handover')}>Handover</button></div></div>
         </Panel>
         <Panel title="What happens next">
           <p className="body-copy">Review the manufacturer-side Warehouse Handover when ready to record the actual quantity handed over.</p>
@@ -449,7 +504,7 @@ function ShipmentSaved({ onNavigate, scheduleDraft, selectedScheduleId }: Manufa
           <KeyValueRows rows={ [['Saved by', 'Ayesha M.'], ['Saved at', '20 Oct · 10:20 SLST'], ['Schedule owner', 'Manufacturer Admin']] } />
         </Panel>
       </div>
-      <div className="screen-footnote"><span>FreightFlow · Manufacturing administration</span><span>Static action state · Factory-owned stock only</span></div>
+      <div className="screen-footnote"><span>Static action state · Factory-owned stock only</span></div>
     </main>
   )
 }
@@ -508,7 +563,7 @@ function AgencyMaintenance({ onNavigate }: ManufacturingScreensProps) {
         </div>
       </div>
       <div className="screen-actions"><button className="button" type="button" onClick={() => setShowList(true)}>Return to agency list</button></div>
-      <div className="screen-footnote"><span>FreightFlow · Manufacturing administration</span><span>Manufacturer-side administration only</span></div>
+      <div className="screen-footnote"><span>Manufacturer-side administration only</span></div>
     </main>
   )
 }

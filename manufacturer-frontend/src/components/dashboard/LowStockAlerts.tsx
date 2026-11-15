@@ -8,11 +8,8 @@ function LowStockAlerts({ alerts }: LowStockAlertsProps) {
   return (
     <section className="panel alerts-panel">
       <div className="panel-heading">
-        <div>
-          <h2>Low stock alerts</h2>
-          <p>Products below safety stock threshold</p>
-        </div>
-        <span className="panel-count">{alerts.length} alerts</span>
+      <div><h2>Low stock alerts</h2></div>
+      <span className="panel-count">{alerts.length} alerts</span>
       </div>
       <ul className="alert-list">
         {alerts.map((alert) => (
@@ -20,9 +17,9 @@ function LowStockAlerts({ alerts }: LowStockAlertsProps) {
             <strong>
               {alert.id} · {alert.product}
             </strong>
-            <span>Available {alert.available}</span>
-            <span>Threshold {alert.threshold}</span>
-            <span>{alert.message}</span>
+            <span className="alert-availability">Available {alert.available}</span>
+            <span className="alert-threshold">Threshold {alert.threshold}</span>
+            <span className="alert-message">{alert.message}</span>
           </li>
         ))}
       </ul>

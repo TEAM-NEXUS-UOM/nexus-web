@@ -1,6 +1,6 @@
 <div align="center">
 
-# NexusFlow
+# Nexus
 ### Manufacturer-Centric Distribution Management System
 
 Connecting distribution, from manufacturer to retailer.

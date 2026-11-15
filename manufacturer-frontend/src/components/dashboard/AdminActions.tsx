@@ -9,16 +9,13 @@ function AdminActions({ actions, onAction }: AdminActionsProps) {
   return (
     <section className="panel admin-actions-panel">
       <div className="panel-heading">
-        <div>
-          <h2>Admin actions</h2>
-          <p>Common manufacturing administration tasks</p>
-        </div>
+        <h2>Admin actions</h2>
         <span className="panel-count">{actions.length} actions</span>
       </div>
       <div className="admin-actions">
         {actions.map((action) => (
           <button
-            className={`button${action.primary ? ' button-primary' : ''}`}
+            className="button"
             type="button"
             onClick={() => onAction?.(action.label)}
             key={action.label}

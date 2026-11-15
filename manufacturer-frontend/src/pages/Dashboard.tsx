@@ -1,4 +1,5 @@
 import AdminActions from '../components/dashboard/AdminActions'
+import DashboardCharts from '../components/dashboard/DashboardCharts'
 import LowStockAlerts from '../components/dashboard/LowStockAlerts'
 import ShipmentSummary from '../components/dashboard/ShipmentSummary'
 import StockOverview from '../components/dashboard/StockOverview'
@@ -22,13 +23,15 @@ function Dashboard({ onNavigate }: DashboardProps) {
     <div className="app-layout">
       <Sidebar activePage="dashboard" onNavigate={onNavigate} />
       <div className="main-column">
-        <Header onNavigate={onNavigate} />
+        <Header />
         <main className="dashboard-content">
           <section className="summary-grid" aria-label="Inventory summary">
             {summaryMetrics.map((metric) => (
               <SummaryCard metric={metric} key={metric.label} />
             ))}
           </section>
+
+          <DashboardCharts stockRecords={stockRecords} shipments={shipments} />
 
           <div className="dashboard-grid dashboard-grid-primary">
             <StockOverview records={stockRecords} />

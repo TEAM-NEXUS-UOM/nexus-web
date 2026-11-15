@@ -129,7 +129,7 @@ export const lowStockAlerts: LowStockAlert[] = [
 ]
 
 export const adminActions: AdminAction[] = [
-  { label: 'Review SAP requirements', primary: true },
+  { label: 'Review SAP requirements' },
   { label: 'Review upcoming orders' },
   { label: 'Check manufacturing stocks' },
   { label: 'Reports & History' },

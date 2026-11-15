@@ -10,11 +10,8 @@ function ShipmentSummary({ shipments, onNavigate }: ShipmentSummaryProps) {
   return (
     <section className="panel shipment-panel">
       <div className="panel-heading">
-        <div>
-          <h2>Shipment summary</h2>
-          <p>Required quantity and planned pickup</p>
-        </div>
-        <span className="panel-count">{shipments.length} shipments</span>
+      <div><h2>Shipment summary</h2></div>
+      <span className="panel-count">{shipments.length} shipments</span>
       </div>
       <ul className="shipment-list">
         {shipments.map((shipment) => (
@@ -32,8 +29,8 @@ function ShipmentSummary({ shipments, onNavigate }: ShipmentSummaryProps) {
         <button className="button button-primary" type="button" onClick={() => onNavigate('shipment-create')}>
           Create shipment schedule
         </button>
-        <button className="button" type="button" onClick={() => onNavigate('shipment-schedules')}>
-          Warehouse handover
+        <button className="button" type="button" onClick={() => onNavigate('warehouse-handover')}>
+          Handover
         </button>
       </div>
     </section>

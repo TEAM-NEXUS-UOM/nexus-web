@@ -31,5 +31,4 @@ export interface LowStockAlert {
 
 export interface AdminAction {
   label: string
-  primary?: boolean
 }

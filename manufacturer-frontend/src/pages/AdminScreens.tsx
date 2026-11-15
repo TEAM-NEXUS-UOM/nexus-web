@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import type { WorkspacePage } from '../components/layout/Sidebar'
+import ReportTabs from '../components/layout/ReportTabs'
+import { shipmentSchedules } from '../data/shipmentSchedules'
 
 interface AdminScreensProps {
   page: WorkspacePage
@@ -57,13 +59,6 @@ const alerts = [
   },
 ]
 
-const reportTabs: { label: string; page: WorkspacePage }[] = [
-  { label: 'Orders', page: 'reports-orders' },
-  { label: 'Stock', page: 'reports' },
-  { label: 'Schedules', page: 'shipment-schedules' },
-  { label: 'Handover', page: 'reports-handover' },
-]
-
 function Panel({ title, children, className = '' }: { title: string; children: ReactNode; className?: string }) {
   return (
     <section className={`screen-panel ${className}`}>
@@ -76,7 +71,6 @@ function Panel({ title, children, className = '' }: { title: string; children: R
 function ScreenFooter({ note = 'Manufacturer-side administration only' }: { note?: string }) {
   return (
     <div className="screen-footnote">
-      <span>FreightFlow · Manufacturing administration</span>
       <span>{note}</span>
     </div>
   )
@@ -203,20 +197,10 @@ function NotificationPreferences({ onNavigate }: AdminScreensProps) {
   )
 }
 
-function ReportsNavigation({ page, onNavigate }: AdminScreensProps) {
-  return (
-    <div className="tab-list reports-tabs" role="tablist" aria-label="Report type">
-      {reportTabs.map((tab) => (
-        <button className={page === tab.page ? 'active-tab' : ''} type="button" role="tab" aria-selected={page === tab.page} key={tab.label} onClick={() => onNavigate(tab.page)}>{tab.label}</button>
-      ))}
-    </div>
-  )
-}
-
 function OrdersReport({ page, onNavigate }: AdminScreensProps) {
   return (
     <main className="dashboard-content screen-content">
-      <ReportsNavigation page={page} onNavigate={onNavigate} />
+      <ReportTabs page={page} onNavigate={onNavigate} />
       <Panel title="Order report filters">
         <div className="report-filter-grid">
           <label className="form-field">Required date range<select><option>All dates</option><option>18 Oct 2026</option></select></label>
@@ -239,71 +223,127 @@ function OrdersReport({ page, onNavigate }: AdminScreensProps) {
   )
 }
 
-function HandoverReport({ page, onNavigate }: AdminScreensProps) {
-  return (
-    <main className="dashboard-content screen-content">
-      <ReportsNavigation page={page} onNavigate={onNavigate} />
-      <Panel title="Handover report filters">
-        <div className="report-filter-grid">
-          <label className="form-field">Recorded date range<select><option>All recorded dates</option></select></label>
-          <label className="form-field">Product<select><option>All products</option></select></label>
-          <label className="form-field">Recorded by<select><option>All confirmed recorders</option></select></label>
-          <label className="form-field">Related schedule<select><option>Confirmed relationships only</option></select></label>
-        </div>
-        <div className="report-actions"><button className="button button-primary" type="button">Apply filters</button><button className="button" type="button">Reset</button><button className="button export-disabled" type="button" disabled>Export handover report</button></div>
-      </Panel>
-      <Panel title="Manufacturer handover history">
-        <span className="status-chip">No verified records</span>
-        <div className="responsive-table"><table className="screen-table"><thead><tr><th>Record</th><th>Product / SKU</th><th>Actual handed-over quantity</th><th>Recorded date</th><th>Recorded by</th><th>Related schedule (confirmed only)</th></tr></thead></table></div>
-        <div className="empty-state report-empty"><strong>No verified manufacturer-side handover records</strong><p>No saved records or history have been supplied. A shipment schedule does not establish that a handover occurred.</p></div>
-        <p className="footnote">Related schedules will appear only when the record relationship is confirmed.</p>
-      </Panel>
-      <div className="notice-box authorization-notice"><strong>Recording is subject to authorization</strong><p>Record actual manufacturer-side handed-over quantity only when authorized. Warehouse acceptance and receiving are outside this responsibility.</p></div>
-      <div className="screen-actions"><button className="button" type="button" onClick={() => onNavigate('reports')}>Back to reports overview</button><button className="button export-disabled" type="button" disabled>Record handover · Authorization required</button></div>
-      <ScreenFooter />
-    </main>
+function WarehouseHandover({ onNavigate }: AdminScreensProps) {
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [confirming, setConfirming] = useState(false)
+  const [selectedId, setSelectedId] = useState('')
+  const [submitError, setSubmitError] = useState('')
+  const [today] = useState(() => {
+    const date = new Date()
+    date.setHours(0, 0, 0, 0)
+    return date
+  })
+  const eligibleSchedules = shipmentSchedules.filter((schedule) =>
+    schedule.status === 'Scheduled'
+    && schedule.approvalStatus === 'Approved'
+    && schedule.id.trim() !== ''
+    && schedule.productName.trim() !== ''
+    && schedule.productCode.trim() !== ''
+    && Number.isSafeInteger(schedule.quantity)
+    && schedule.quantity > 0
+    && !Number.isNaN(Date.parse(`${schedule.plannedDate}T00:00:00`))
+    && new Date(`${schedule.plannedDate}T00:00:00`) >= today,
   )
-}
-
-function WarehouseHandover({ onNavigate, selectedScheduleId = 'SCH-2051', scheduleDraft }: AdminScreensProps) {
-  const productName = scheduleDraft?.productId === 'MC-BIS-004'
-    ? 'Nice · MC-BIS-004 · 100g'
-    : 'Cream Cracker · MC-BIS-001 · 200g'
-  const requiredQuantity = scheduleDraft?.quantity || '800'
-  const pickupDate = scheduleDraft?.pickupDate
-    ? new Date(`${scheduleDraft.pickupDate}T00:00:00`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-    : '23 Oct 2026'
+  const selectedSchedule = eligibleSchedules.find((schedule) => schedule.id === selectedId)
+  const closeDialog = () => {
+    setDialogOpen(false)
+    setConfirming(false)
+    setSelectedId('')
+    setSubmitError('')
+  }
+  const confirmAndSend = () => {
+    setSubmitError('')
+    const schedule = shipmentSchedules.find((item) => item.id === selectedId)
+    if (!schedule
+      || schedule.status !== 'Scheduled'
+      || schedule.approvalStatus !== 'Approved'
+      || !Number.isSafeInteger(schedule.quantity)
+      || schedule.quantity <= 0
+      || new Date(`${schedule.plannedDate}T00:00:00`) < today) {
+      setSubmitError('This shipment schedule is missing or is not approved and current. It cannot be sent.')
+      setConfirming(false)
+      return
+    }
+    setSubmitError('Shipment submission is unavailable: no Warehouse Admin handover API is configured. No record was sent or saved.')
+  }
   return (
-    <main className="dashboard-content screen-content">
-      <div className="detail-layout handover-layout">
-        <div className="detail-main">
-          <Panel title="Manufacturer handover records">
-            <div className="empty-state handover-empty">
-              <strong>No verified handover records</strong>
-              <p>No saved manufacturer-side handover records have been supplied. Start a record using the existing schedule as read-only context.</p>
-            </div>
-            <div className="notice-box"><strong>Data confirmation</strong><p>Handover record fields and schedule relationships require ERP confirmation.</p></div>
-          </Panel>
-          <Panel title="Manufacturer-side scope">
-            <p className="body-copy handover-scope">Record actual handed-over quantity only. This view does not manage warehouse inventory, receiving or stock acceptance.</p>
-            <p className="footnote">A shipment schedule is context, not evidence that a handover has occurred.</p>
-          </Panel>
+    <main className="dashboard-content screen-content handover-page">
+      <header className="handover-page-header">
+        <div>
+          <h1>Warehouse Handover</h1>
+          <p>Send shipment records to Warehouse Admin.</p>
         </div>
-        <Panel title="Schedule context · Read only">
-          <dl className="detail-rows">
-            <div className="detail-row"><dt>Schedule</dt><dd>{selectedScheduleId}</dd></div>
-            <div className="detail-row"><dt>Product</dt><dd>{productName}</dd></div>
-            <div className="detail-row"><dt>Required quantity</dt><dd>{Number(requiredQuantity).toLocaleString('en-US')} units</dd></div>
-            <div className="detail-row"><dt>Planned next pickup date</dt><dd>{pickupDate}</dd></div>
-          </dl>
-          <p className="footnote">Context from the existing manufacturer schedule, not a saved handover record.</p>
-        </Panel>
-      </div>
+      </header>
+      <Panel title="Manufacturer Handover Records">
+        <div className="responsive-table">
+          <table className="screen-table">
+            <thead><tr><th>Schedule ID</th><th>Product</th><th>Quantity</th><th>Planned Date</th><th>Sent Date</th><th>Status</th></tr></thead>
+          </table>
+        </div>
+        <div className="empty-state handover-empty"><strong>No shipment records have been sent.</strong></div>
+        <div className="handover-container-actions">
+          <button className="button" type="button" onClick={() => onNavigate('shipment-schedules')}>Create Shipment Report</button>
+          <button className="button button-primary handover-send-button" type="button" onClick={() => { setDialogOpen(true); setConfirming(false); setSubmitError('') }}>
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 3 10.5 13.5M21 3l-6.5 18-4-7.5L3 9.5 21 3Z" /></svg>
+            Send to Warehouse Admin
+          </button>
+        </div>
+      </Panel>
       <div className="screen-actions">
-        <button className="button" type="button" onClick={() => onNavigate('shipment-schedules')}>Back to shipment schedules</button>
-        <button className="button button-primary" type="button" onClick={() => onNavigate('reports-handover')}>Record warehouse handover</button>
+        <button className="button" type="button" onClick={() => onNavigate('shipment-schedules')}>Back to Shipment Schedules</button>
       </div>
-      <ScreenFooter note="Manufacturer-side review only" />
+      {dialogOpen && (
+        <div className="handover-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) closeDialog() }}>
+          <section className="handover-modal" role="dialog" aria-modal="true" aria-labelledby="handover-modal-title">
+            <h2 id="handover-modal-title">{confirming ? 'Confirm Shipment Handover' : 'Select Shipment Schedule'}</h2>
+            {confirming && selectedSchedule ? (
+              <>
+                <p className="handover-modal-description">You are about to send the following shipment record to the Warehouse Admin.</p>
+                <dl className="detail-rows">
+                  <div className="detail-row"><dt>Shipment Schedule ID</dt><dd>{selectedSchedule.id}</dd></div>
+                  <div className="detail-row"><dt>Product</dt><dd>{selectedSchedule.productName} · {selectedSchedule.productCode}</dd></div>
+                  <div className="detail-row"><dt>Shipment Quantity</dt><dd>{selectedSchedule.quantity.toLocaleString('en-US')}</dd></div>
+                  <div className="detail-row"><dt>Planned Shipment Date</dt><dd>{new Date(`${selectedSchedule.plannedDate}T00:00:00`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</dd></div>
+                </dl>
+                {submitError && <p className="inline-error" role="alert">{submitError}</p>}
+                <div className="handover-modal-actions">
+                  <button className="button" type="button" onClick={() => { setConfirming(false); setSubmitError('') }}>Cancel</button>
+                  <button className="button button-primary" type="button" onClick={confirmAndSend}>Confirm &amp; Send</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="handover-api-status" role="status">Warehouse Admin submission is unavailable because no handover API is configured. No record will be sent.</p>
+                {eligibleSchedules.length > 0 ? (
+                  <div className="responsive-table">
+                    <table className="screen-table">
+                      <thead><tr><th>Schedule ID</th><th>Product</th><th>Code</th><th>Quantity</th><th>Planned Date</th><th>Report / Order</th><th>Destination / Shop</th><th></th></tr></thead>
+                      <tbody>{eligibleSchedules.map((schedule) => (
+                        <tr key={schedule.id}>
+                          <td>{schedule.id}</td><td>{schedule.productName}</td><td>{schedule.productCode}</td><td>{schedule.quantity.toLocaleString('en-US')}</td>
+                          <td>{new Date(`${schedule.plannedDate}T00:00:00`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
+                          <td>{schedule.reportReference || 'Not linked'}</td><td>{schedule.destination || 'Not provided'}</td>
+                          <td><button className="text-button" type="button" onClick={() => { setSelectedId(schedule.id); setSubmitError('') }}>{selectedId === schedule.id ? 'Selected' : 'Select'}</button></td>
+                        </tr>
+                      ))}</tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="empty-state handover-empty">
+                    <strong>No eligible shipment schedules are available.</strong>
+                    <p>Schedules must be approved and have a future planned date. Current schedules are unverified and past-dated.</p>
+                  </div>
+                )}
+                {submitError && <p className="inline-error" role="alert">{submitError}</p>}
+                <div className="handover-modal-actions">
+                  <button className="button" type="button" onClick={closeDialog}>Cancel</button>
+                  <button className="button button-primary" type="button" disabled={!selectedSchedule} onClick={() => { setConfirming(true); setSubmitError('') }}>Continue</button>
+                </div>
+              </>
+            )}
+          </section>
+        </div>
+      )}
     </main>
   )
 }
@@ -356,7 +396,6 @@ function AdminScreens({ page, onNavigate }: AdminScreensProps) {
     case 'notification-preferences': return <NotificationPreferences page={page} onNavigate={onNavigate} />
     case 'warehouse-handover': return <WarehouseHandover page={page} onNavigate={onNavigate} />
     case 'reports-orders': return <OrdersReport page={page} onNavigate={onNavigate} />
-    case 'reports-handover': return <HandoverReport page={page} onNavigate={onNavigate} />
     case 'account-preferences': return <AccountPreferences page={page} onNavigate={onNavigate} />
     default: return null
   }
