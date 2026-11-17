@@ -16,7 +16,26 @@ type WorkspacePage =
   | 'super-admin'
 
 type AgencyStatus = 'Active' | 'Inactive' | 'Pending'
-type SapStatus = 'Pending Review' | 'In Progress' | 'Approved' | 'Rejected'
+type SapStatus = 'PENDING' | 'IN_PROGRESS' | 'ACCEPTED' | 'PARTIALLY_ACCEPTED' | 'REJECTED'
+type ItemDecision = 'PENDING' | 'ACCEPTED' | 'REJECTED'
+type AllocationStatus = 'Draft' | 'Ready for Handover' | 'Completed'
+
+interface DecisionHistoryEntry {
+  id: string
+  subject: string
+  action: string
+  reason?: string
+  decisionMaker: string
+  decidedAt: string
+}
+
+interface AppNotification {
+  id: string
+  title: string
+  detail: string
+  time: string
+  unread: boolean
+}
 
 interface Agency {
   id: string
@@ -38,6 +57,9 @@ interface SapReportItem {
   quantity: number
   contact: string
   duePayment: number
+  decision: ItemDecision
+  allocatedQuantity?: number
+  rejectionReason?: string
 }
 
 interface SapReport {
@@ -47,6 +69,8 @@ interface SapReport {
   status: SapStatus
   adminName: string
   items: SapReportItem[]
+  reviewStarted: boolean
+  decisionHistory: DecisionHistoryEntry[]
 }
 
 interface InventoryItem {
@@ -78,8 +102,11 @@ interface AllocationRecord {
   reportId: string
   reportName: string
   createdAt: string
-  status: 'Draft' | 'Allocated' | 'Ready for Handover' | 'Completed'
+  status: AllocationStatus
   lines: {
+    itemId: string
+    agencyId: string
+    agencyName: string
     productId: string
     productName: string
     requested: number
@@ -92,6 +119,27 @@ interface ManufacturingAdminAccount {
   name: string
   email: string
   status: 'Assigned' | 'Pending' | 'Inactive'
+}
+
+const getSapStatus = (items: SapReportItem[], reviewStarted: boolean): SapStatus => {
+  if (items.length > 0 && items.every((item) => item.decision === 'ACCEPTED')) return 'ACCEPTED'
+  if (items.length > 0 && items.every((item) => item.decision === 'REJECTED')) return 'REJECTED'
+  if (items.length > 0 && items.every((item) => item.decision !== 'PENDING')) return 'PARTIALLY_ACCEPTED'
+  return reviewStarted || items.some((item) => item.decision !== 'PENDING') ? 'IN_PROGRESS' : 'PENDING'
+}
+
+const getSapStatusLabel = (status: SapStatus) =>
+  status.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase())
+
+const loadLocalState = <T,>(key: string, initialValue: T): T => {
+  try {
+    const saved = window.localStorage.getItem(key)
+    if (!saved) return initialValue
+    return JSON.parse(saved) as T
+  } catch (error) {
+    console.error(`Could not read local demo data for ${key}.`, error)
+    return initialValue
+  }
 }
 
 const formatNumber = (value: number) => new Intl.NumberFormat('en-US').format(value)
@@ -121,21 +169,25 @@ const initialReports: SapReport[] = [
     id: 'SR-901',
     fileName: 'sap_report_batch_18.xlsx',
     uploadedAt: '2026-10-18',
-    status: 'Pending Review',
+    status: 'IN_PROGRESS',
     adminName: 'Ayesha M.',
+    reviewStarted: true,
+    decisionHistory: [],
     items: [
-      { id: 'RI-101', agencyId: 'AG-102', agencyName: 'Western Retail Group', productId: 'P-101', productName: 'Cream Cracker', quantity: 1800, contact: 'Asha Perera', duePayment: 4200 },
-      { id: 'RI-102', agencyId: 'AG-203', agencyName: 'Central Trading Hub', productId: 'P-102', productName: 'Chocolate Cream', quantity: 1200, contact: 'Nimal Senanayake', duePayment: 3100 },
-      { id: 'RI-103', agencyId: 'AG-102', agencyName: 'Western Retail Group', productId: 'P-104', productName: 'Nice', quantity: 900, contact: 'Asha Perera', duePayment: 2000 },
+      { id: 'RI-101', agencyId: 'AG-102', agencyName: 'Western Retail Group', productId: 'P-101', productName: 'Cream Cracker', quantity: 1800, contact: 'Asha Perera', duePayment: 4200, decision: 'PENDING' },
+      { id: 'RI-102', agencyId: 'AG-203', agencyName: 'Central Trading Hub', productId: 'P-102', productName: 'Chocolate Cream', quantity: 1200, contact: 'Nimal Senanayake', duePayment: 3100, decision: 'PENDING' },
+      { id: 'RI-103', agencyId: 'AG-102', agencyName: 'Western Retail Group', productId: 'P-104', productName: 'Nice', quantity: 900, contact: 'Asha Perera', duePayment: 2000, decision: 'PENDING' },
     ],
   },
   {
     id: 'SR-902',
     fileName: 'upcoming_orders.xlsx',
     uploadedAt: '2026-10-20',
-    status: 'Approved',
+    status: 'PENDING',
     adminName: 'Ayesha M.',
-    items: [{ id: 'RI-201', agencyId: 'AG-304', agencyName: 'Southern Distribution Co.', productId: 'P-103', productName: 'Lemon Puff', quantity: 1400, contact: 'Dilhani Fernando', duePayment: 4200 }],
+    reviewStarted: false,
+    decisionHistory: [],
+    items: [{ id: 'RI-201', agencyId: 'AG-304', agencyName: 'Southern Distribution Co.', productId: 'P-103', productName: 'Lemon Puff', quantity: 1400, contact: 'Dilhani Fernando', duePayment: 4200, decision: 'PENDING' }],
   },
 ]
 
@@ -146,8 +198,8 @@ const initialMovements: StockMovement[] = [
 ]
 
 const initialAllocations: AllocationRecord[] = [
-  { id: 'AO-1001', agencyId: 'AG-102', agencyName: 'Western Retail Group', reportId: 'SR-901', reportName: 'sap_report_batch_18.xlsx', createdAt: '2026-10-20', status: 'Ready for Handover', lines: [{ productId: 'P-101', productName: 'Cream Cracker', requested: 1800, allocated: 1600 }, { productId: 'P-104', productName: 'Nice', requested: 900, allocated: 900 }] },
-  { id: 'AO-1002', agencyId: 'AG-203', agencyName: 'Central Trading Hub', reportId: 'SR-901', reportName: 'sap_report_batch_18.xlsx', createdAt: '2026-10-20', status: 'Allocated', lines: [{ productId: 'P-102', productName: 'Chocolate Cream', requested: 1200, allocated: 1100 }] },
+  { id: 'AO-1001', agencyId: 'AG-102', agencyName: 'Western Retail Group', reportId: 'SR-901', reportName: 'sap_report_batch_18.xlsx', createdAt: '2026-10-20', status: 'Draft', lines: [{ itemId: 'RI-101', agencyId: 'AG-102', agencyName: 'Western Retail Group', productId: 'P-101', productName: 'Cream Cracker', requested: 1800, allocated: 1600 }, { itemId: 'RI-103', agencyId: 'AG-102', agencyName: 'Western Retail Group', productId: 'P-104', productName: 'Nice', requested: 900, allocated: 900 }] },
+  { id: 'AO-1002', agencyId: 'AG-203', agencyName: 'Central Trading Hub', reportId: 'SR-901', reportName: 'sap_report_batch_18.xlsx', createdAt: '2026-10-20', status: 'Draft', lines: [{ itemId: 'RI-102', agencyId: 'AG-203', agencyName: 'Central Trading Hub', productId: 'P-102', productName: 'Chocolate Cream', requested: 1200, allocated: 1100 }] },
 ]
 
 const initialAdminAccounts: ManufacturingAdminAccount[] = [
@@ -160,18 +212,18 @@ function App() {
   const [role, setRole] = useState<Role>('manufacturing-admin')
   const [currentPage, setCurrentPage] = useState<WorkspacePage>('dashboard')
   const [agencies, setAgencies] = useState<Agency[]>(initialAgencies)
-  const [reports, setReports] = useState<SapReport[]>(initialReports)
+  const [reports, setReports] = useState<SapReport[]>(() => loadLocalState('nexus-demo-sap-reports-v1', initialReports))
   const [inventory, setInventory] = useState<InventoryItem[]>(initialInventory)
   const [movements, setMovements] = useState<StockMovement[]>(initialMovements)
-  const [allocations, setAllocations] = useState<AllocationRecord[]>(initialAllocations)
+  const [allocations, setAllocations] = useState<AllocationRecord[]>(() => loadLocalState('nexus-demo-allocations-v1', initialAllocations))
   const [adminAccounts, setAdminAccounts] = useState<ManufacturingAdminAccount[]>(initialAdminAccounts)
   const [toast, setToast] = useState<string | null>(null)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [notifications, setNotifications] = useState([
+  const [notifications, setNotifications] = useState<AppNotification[]>(() => loadLocalState('nexus-demo-notifications-v1', [
     { id: 'n1', title: 'SAP report review pending', detail: '1 report needs approval before agency allocation.', time: '5 min ago', unread: true },
     { id: 'n2', title: 'Low stock alert', detail: 'Lemon Puff is below the safety threshold.', time: '35 min ago', unread: true },
     { id: 'n3', title: 'Allocation updated', detail: 'Western Retail Group allocation was saved successfully.', time: '2 hrs ago', unread: false },
-  ])
+  ]))
   const [settings, setSettings] = useState({ emailAlerts: true, desktopNotifications: true, autoSync: false })
   const [profileForm, setProfileForm] = useState({ name: 'Ayesha M.', email: 'ayesha@manufacturer.lk', role: 'Manufacturing Admin' })
   const [loginForm, setLoginForm] = useState({ email: '', password: '' })
@@ -195,6 +247,33 @@ function App() {
     const timeoutId = window.setTimeout(() => setToast(null), 2800)
     return () => window.clearTimeout(timeoutId)
   }, [toast])
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('nexus-demo-sap-reports-v1', JSON.stringify(reports))
+    } catch (error) {
+      console.error('Could not persist local demo SAP decisions.', error)
+      setToast('Could not save your report decisions in this browser.')
+    }
+  }, [reports])
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('nexus-demo-allocations-v1', JSON.stringify(allocations))
+    } catch (error) {
+      console.error('Could not persist the local demo allocation cart.', error)
+      setToast('Could not save the allocation cart in this browser.')
+    }
+  }, [allocations])
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('nexus-demo-notifications-v1', JSON.stringify(notifications))
+    } catch (error) {
+      console.error('Could not persist local demo notifications.', error)
+      setToast('Could not save notifications in this browser.')
+    }
+  }, [notifications])
 
   const pageTitleMap: Record<WorkspacePage, string> = {
     dashboard: 'Dashboard',
@@ -228,13 +307,13 @@ function App() {
       case 'sap-reports':
         return <SapReportsPage reports={reports} setReports={setReports} setToast={setToast} onNavigate={setCurrentPage} />
       case 'stock-allocation':
-        return <StockAllocationPage reports={reports} inventory={inventory} allocations={allocations} setAllocations={setAllocations} setToast={setToast} onNavigate={setCurrentPage} />
+        return <StockAllocationPage reports={reports} inventory={inventory} allocations={allocations} setReports={setReports} setAllocations={setAllocations} setNotifications={setNotifications} profileName={profileForm.name} setToast={setToast} onNavigate={setCurrentPage} />
       case 'inventory':
         return <InventoryPage inventory={inventory} setInventory={setInventory} setMovements={setMovements} setToast={setToast} />
       case 'stock-movements':
         return <StockMovementPage movements={movements} />
       case 'handover':
-        return <HandoverPage allocations={allocations} setToast={setToast} onNavigate={setCurrentPage} />
+        return <HandoverPage allocations={allocations} setAllocations={setAllocations} setToast={setToast} onNavigate={setCurrentPage} />
       case 'reports':
         return <ReportsPage reports={reports} allocations={allocations} inventory={inventory} movements={movements} />
       case 'notifications':
@@ -361,7 +440,7 @@ function App() {
   )
 }
 
-function NotificationsPage({ notifications, setNotifications }: { notifications: { id: string; title: string; detail: string; time: string; unread: boolean }[]; setNotifications: React.Dispatch<React.SetStateAction<{ id: string; title: string; detail: string; time: string; unread: boolean }[]>> }) {
+function NotificationsPage({ notifications, setNotifications }: { notifications: AppNotification[]; setNotifications: React.Dispatch<React.SetStateAction<AppNotification[]>> }) {
   return (
     <div className="page-stack">
       <section className="panel">
@@ -438,7 +517,7 @@ function SettingsPage({ profileForm, setProfileForm, settings, setSettings, setT
 function DashboardPage({ agencies, inventory, reports, allocations, movements, onNavigate }: { agencies: Agency[]; inventory: InventoryItem[]; reports: SapReport[]; allocations: AllocationRecord[]; movements: StockMovement[]; onNavigate: (page: WorkspacePage) => void }) {
   const totalAvailable = inventory.reduce((sum, item) => sum + item.available, 0)
   const totalReserved = inventory.reduce((sum, item) => sum + item.reserved, 0)
-  const pendingReports = reports.filter((report) => report.status === 'Pending Review').length
+  const pendingReports = reports.filter((report) => report.status === 'PENDING').length
   const lowStockAlerts = inventory.filter((item) => item.available <= item.threshold).length
   const recentActivities = movements.slice(0, 4)
 
@@ -619,16 +698,11 @@ function SapReportsPage({ reports, setReports, setToast, onNavigate }: { reports
   const handleUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
-    const newReport: SapReport = { id: `SR-${Date.now()}`, fileName: file.name, uploadedAt: new Date().toISOString().slice(0, 10), status: 'Pending Review', adminName: 'Ayesha M.', items: [] }
+    const newReport: SapReport = { id: `SR-${Date.now()}`, fileName: file.name, uploadedAt: new Date().toISOString().slice(0, 10), status: 'PENDING', adminName: 'Ayesha M.', items: [], reviewStarted: false, decisionHistory: [] }
     setReports((current) => [newReport, ...current])
     setSelectedReportId(newReport.id)
     setToast(`Uploaded ${file.name} and saved it for review.`)
     event.target.value = ''
-  }
-
-  const handleStatusUpdate = (reportId: string, status: SapStatus) => {
-    setReports((current) => current.map((report) => (report.id === reportId ? { ...report, status } : report)))
-    setToast(`Updated report status to ${status}.`)
   }
 
   return (
@@ -639,21 +713,30 @@ function SapReportsPage({ reports, setReports, setToast, onNavigate }: { reports
           <label className="upload-button"><input type="file" accept=".xlsx,.xls,.csv" onChange={handleUpload} />Upload SAP report</label>
         </div>
         <div className="table-wrapper"><table><thead><tr><th>File</th><th>Upload date</th><th>Admin</th><th>Status</th><th>Items</th></tr></thead><tbody>{reports.map((report) => (
-          <tr key={report.id} className={selectedReport?.id === report.id ? 'selected-row' : ''}>
+          <tr key={report.id} className={selectedReport?.id === report.id ? 'selected-row' : ''} onClick={() => setSelectedReportId(report.id)}>
             <td onClick={() => setSelectedReportId(report.id)}>{report.fileName}</td>
             <td onClick={() => setSelectedReportId(report.id)}>{report.uploadedAt}</td>
             <td onClick={() => setSelectedReportId(report.id)}>{report.adminName}</td>
-            <td><select value={report.status} onChange={(event) => handleStatusUpdate(report.id, event.target.value as SapStatus)}><option value="Pending Review">Pending Review</option><option value="In Progress">In Progress</option><option value="Approved">Approved</option><option value="Rejected">Rejected</option></select></td>
+            <td><span className={`status-badge ${report.status.toLowerCase().replace(/_/g, '-')}`}>{getSapStatusLabel(report.status)}</span></td>
             <td onClick={() => setSelectedReportId(report.id)}>{report.items.length}</td>
           </tr>))}</tbody></table></div>
       </section>
 
       {selectedReport ? (
         <section className="panel sap-status-panel">
-          <div className="panel-heading split"><h2>{selectedReport.fileName}</h2><span className={`status-badge ${selectedReport.status.toLowerCase().replace(/\s+/g, '-')}`}>{selectedReport.status}</span></div>
-          <dl className="detail-list"><div><dt>Uploaded</dt><dd>{selectedReport.uploadedAt}</dd></div><div><dt>Reviewer</dt><dd>{selectedReport.adminName}</dd></div><div><dt>Report status</dt><dd>{selectedReport.status}</dd></div></dl>
+          <div className="panel-heading split"><h2>{selectedReport.fileName}</h2><span className={`status-badge ${selectedReport.status.toLowerCase().replace(/_/g, '-')}`}>{getSapStatusLabel(selectedReport.status)}</span></div>
+          <dl className="detail-list"><div><dt>Uploaded</dt><dd>{selectedReport.uploadedAt}</dd></div><div><dt>Reviewer</dt><dd>{selectedReport.adminName}</dd></div><div><dt>Report status</dt><dd>{getSapStatusLabel(selectedReport.status)}</dd></div></dl>
           <div className="section-title">Report items</div>
-          <div className="table-wrapper"><table><thead><tr><th>Agency</th><th>Product</th><th>Quantity</th><th>Contact</th><th>Due payment</th></tr></thead><tbody>{selectedReport.items.length ? selectedReport.items.map((item) => <tr key={item.id}><td>{item.agencyName}</td><td>{item.productName}</td><td>{formatNumber(item.quantity)}</td><td>{item.contact}</td><td>{formatCurrency(item.duePayment)}</td></tr>) : <tr><td colSpan={5}>No items uploaded for this report yet.</td></tr>}</tbody></table></div>
+          <div className="table-wrapper"><table><thead><tr><th>Agency</th><th>Product</th><th>Requested</th><th>Decision</th><th>Allocated / reason</th><th>Contact</th><th>Due payment</th></tr></thead><tbody>{selectedReport.items.length ? selectedReport.items.map((item) => <tr key={item.id}><td>{item.agencyName}</td><td>{item.productName}</td><td>{formatNumber(item.quantity)}</td><td>{getSapStatusLabel(item.decision)}</td><td>{item.decision === 'REJECTED' ? item.rejectionReason : item.allocatedQuantity === undefined ? '—' : formatNumber(item.allocatedQuantity)}</td><td>{item.contact}</td><td>{formatCurrency(item.duePayment)}</td></tr>) : <tr><td colSpan={7}>No items uploaded for this report yet.</td></tr>}</tbody></table></div>
+          <div className="decision-history">
+            <h3>Decision history</h3>
+            {selectedReport.decisionHistory.length ? selectedReport.decisionHistory.slice().reverse().map((entry) => (
+              <div className="decision-history-row" key={entry.id}>
+                <div><strong>{entry.action}</strong><span>{entry.subject}{entry.reason ? ` · ${entry.reason}` : ''}</span></div>
+                <small>{entry.decisionMaker} · {new Date(entry.decidedAt).toLocaleString()}</small>
+              </div>
+            )) : <p className="empty-text">No decisions recorded for this report.</p>}
+          </div>
           <div className="report-navigation-actions">
             <button type="button" className="secondary-button" onClick={() => onNavigate('stock-allocation')}>Go to Stock Allocation</button>
           </div>
@@ -663,152 +746,386 @@ function SapReportsPage({ reports, setReports, setToast, onNavigate }: { reports
   )
 }
 
-function StockAllocationPage({ reports, inventory, allocations, setAllocations, setToast, onNavigate }: { reports: SapReport[]; inventory: InventoryItem[]; allocations: AllocationRecord[]; setAllocations: React.Dispatch<React.SetStateAction<AllocationRecord[]>>; setToast: (message: string) => void; onNavigate: (page: WorkspacePage) => void }) {
+type RejectionTarget = { scope: 'item'; itemId: string } | { scope: 'report' }
+
+function StockAllocationPage({ reports, inventory, allocations, setReports, setAllocations, setNotifications, profileName, setToast, onNavigate }: {
+  reports: SapReport[]
+  inventory: InventoryItem[]
+  allocations: AllocationRecord[]
+  setReports: React.Dispatch<React.SetStateAction<SapReport[]>>
+  setAllocations: React.Dispatch<React.SetStateAction<AllocationRecord[]>>
+  setNotifications: React.Dispatch<React.SetStateAction<AppNotification[]>>
+  profileName: string
+  setToast: (message: string) => void
+  onNavigate: (page: WorkspacePage) => void
+}) {
   const [selectedReportId, setSelectedReportId] = useState<string>(reports[0]?.id ?? '')
-  const [draftValues, setDraftValues] = useState<Record<string, Record<string, number>>>({})
+  const [draftValues, setDraftValues] = useState<Record<string, string>>({})
+  const [rejectionTarget, setRejectionTarget] = useState<RejectionTarget | null>(null)
+  const [rejectionReason, setRejectionReason] = useState('')
+  const [customReason, setCustomReason] = useState('')
   const selectedReport = reports.find((report) => report.id === selectedReportId) ?? reports[0]
 
-  const groups = useMemo(() => {
-    const result: Record<string, SapReportItem[]> = {}
-    if (!selectedReport) return result
-    selectedReport.items.forEach((item) => {
-      if (!result[item.agencyId]) result[item.agencyId] = []
-      result[item.agencyId].push(item)
-    })
-    return result
-  }, [selectedReport])
+  const reportAllocations = allocations.filter((allocation) => allocation.reportId === selectedReport?.id)
+  const reportLines = reportAllocations.flatMap((allocation) => allocation.lines)
+  const savedLineForItem = (itemId: string) => reportLines.find((line) => line.itemId === itemId)
+  const reportIsFinalized = reportAllocations.some((allocation) => allocation.status !== 'Draft')
 
-  const getSavedAllocation = (agencyId: string) =>
-    allocations.find((allocation) => allocation.reportId === selectedReport?.id && allocation.agencyId === agencyId)
+  useEffect(() => {
+    if (!selectedReport || selectedReport.reviewStarted) return
+    setReports((current) => current.map((report) => report.id === selectedReport.id
+      ? { ...report, reviewStarted: true, status: getSapStatus(report.items, true) }
+      : report))
+  }, [selectedReport?.id, selectedReport?.reviewStarted, setReports])
 
-  const savedTotalsByProduct = new Map<string, number>()
-  if (selectedReport) {
-    allocations
-      .filter((allocation) => allocation.reportId === selectedReport.id)
-      .forEach((allocation) => allocation.lines.forEach((line) => {
-        savedTotalsByProduct.set(line.productId, (savedTotalsByProduct.get(line.productId) ?? 0) + line.allocated)
-      }))
-  }
-  const savedTotalsFitStock = Array.from(savedTotalsByProduct.entries()).every(([productId, allocated]) => {
-    const available = inventory.find((stock) => stock.productId === productId)?.available
-    return available !== undefined && allocated <= available
-  })
-
-  const isAllocationReady = Boolean(selectedReport && selectedReport.items.length > 0 && Object.entries(groups).length > 0
-    && savedTotalsFitStock
-    && Object.entries(groups).every(([agencyId, items]) => {
-      const saved = getSavedAllocation(agencyId)
-      if (!saved || saved.lines.length !== items.length) return false
-
-      const requestedByProduct = new Map<string, number>()
-      const allocatedByProduct = new Map<string, number>()
-      const invalidRequest = items.some((item) => !Number.isSafeInteger(item.quantity) || item.quantity <= 0)
-      if (invalidRequest) return false
-      items.forEach((item) => requestedByProduct.set(item.productId, (requestedByProduct.get(item.productId) ?? 0) + item.quantity))
-      for (const [index, item] of items.entries()) {
-        const line = saved.lines[index]
-        const draft = draftValues[agencyId]?.[item.id]
-        if (line.productId !== item.productId || (draft !== undefined && draft !== line.allocated) || !Number.isSafeInteger(line.allocated) || line.allocated < 0) {
-          return false
-        }
-        allocatedByProduct.set(line.productId, (allocatedByProduct.get(line.productId) ?? 0) + line.allocated)
-      }
-
-      let totalAllocated = 0
-      for (const [productId, requested] of requestedByProduct) {
-        const allocated = allocatedByProduct.get(productId)
-        const available = inventory.find((stock) => stock.productId === productId)?.available
-        if (allocated === undefined || !Number.isSafeInteger(allocated) || allocated < 0 || allocated > requested || available === undefined || allocated > available) {
-          return false
-        }
-        totalAllocated += allocated
-      }
-
-      return totalAllocated > 0
-    }))
-
-  const updateDraft = (agencyId: string, itemId: string, value: string) => {
-    const num = Number(value)
-    setDraftValues((current) => ({ ...current, [agencyId]: { ...(current[agencyId] ?? {}), [itemId]: Number.isFinite(num) ? num : 0 } }))
+  const availableForItem = (item: SapReportItem) => {
+    const stock = inventory.find((entry) => entry.productId === item.productId)
+    if (!stock) return 0
+    const allocatedElsewhere = allocations.flatMap((allocation) => allocation.lines)
+      .filter((line) => line.productId === item.productId && line.itemId !== item.id)
+      .reduce((total, line) => total + line.allocated, 0)
+    return Math.max(0, stock.available - allocatedElsewhere)
   }
 
-  const saveForAgency = (agencyId: string) => {
-    const agencyItems = groups[agencyId] ?? []
-    const agencyName = agencyItems[0]?.agencyName ?? 'Agency'
-    const allocationsByProduct = new Map<string, { allocated: number; available: number }>()
-    const allocatedElsewhereByProduct = new Map<string, number>()
-    allocations
-      .filter((allocation) => allocation.reportId === selectedReport?.id && allocation.agencyId !== agencyId)
-      .forEach((allocation) => allocation.lines.forEach((line) => {
-        allocatedElsewhereByProduct.set(line.productId, (allocatedElsewhereByProduct.get(line.productId) ?? 0) + line.allocated)
-      }))
-    const invalid = agencyItems.some((item) => {
-      const allocated = draftValues[agencyId]?.[item.id] ?? item.quantity
-      const available = inventory.find((stock) => stock.productId === item.productId)?.available ?? 0
-      const current = allocationsByProduct.get(item.productId) ?? { allocated: 0, available }
-      current.allocated += allocated
-      allocationsByProduct.set(item.productId, current)
-      return !Number.isSafeInteger(item.quantity) || item.quantity <= 0 || !Number.isSafeInteger(available) || !Number.isSafeInteger(allocated) || allocated < 0 || allocated > item.quantity || current.allocated + (allocatedElsewhereByProduct.get(item.productId) ?? 0) > available
-    })
+  const getQuantity = (item: SapReportItem) => {
+    const saved = savedLineForItem(item.id)
+    return Number(draftValues[item.id] ?? saved?.allocated ?? item.allocatedQuantity ?? item.quantity)
+  }
 
-    if (invalid) {
-      setToast('Allocation exceeds request or available stock. Please review the values.')
+  const isValidQuantity = (item: SapReportItem, quantity: number) =>
+    Number.isSafeInteger(item.quantity) && item.quantity > 0
+    && Number.isSafeInteger(quantity) && quantity > 0
+    && quantity <= item.quantity && quantity <= availableForItem(item)
+
+  const upsertLine = (current: AllocationRecord[], item: SapReportItem, allocated: number) => {
+    const matching = current.find((allocation) => allocation.reportId === selectedReport?.id && allocation.agencyId === item.agencyId)
+    if (matching && matching.status !== 'Draft') return current
+    const line = { itemId: item.id, agencyId: item.agencyId, agencyName: item.agencyName, productId: item.productId, productName: item.productName, requested: item.quantity, allocated }
+    if (!matching || !selectedReport) {
+      if (!selectedReport) return current
+      return [...current, {
+        id: `AO-${selectedReport.id}-${item.agencyId}`,
+        agencyId: item.agencyId,
+        agencyName: item.agencyName,
+        reportId: selectedReport.id,
+        reportName: selectedReport.fileName,
+        createdAt: new Date().toISOString().slice(0, 10),
+        status: 'Draft',
+        lines: [line],
+      }]
+    }
+    return current.map((allocation) => allocation.id === matching.id
+      ? { ...allocation, lines: [...allocation.lines.filter((entry) => entry.itemId !== item.id), line] }
+      : allocation)
+  }
+
+  const saveDraft = (item: SapReportItem) => {
+    if (!selectedReport || reportIsFinalized) return
+    const quantity = getQuantity(item)
+    if (!isValidQuantity(item, quantity)) {
+      setToast('Enter a whole-number allocation within the requested quantity and remaining stock.')
       return
     }
-
-    const record: AllocationRecord = {
-      id: `AO-${Math.floor(Math.random() * 900 + 100)}`,
-      agencyId,
-      agencyName,
-      reportId: selectedReport.id,
-      reportName: selectedReport.fileName,
-      createdAt: new Date().toISOString().slice(0, 10),
-      status: 'Allocated',
-      lines: agencyItems.map((item) => ({ productId: item.productId, productName: item.productName, requested: item.quantity, allocated: Math.max(0, Number(draftValues[agencyId]?.[item.id] ?? item.quantity)) })),
+    if (item.decision === 'REJECTED') {
+      setToast('A rejected item cannot be added to the draft cart.')
+      return
     }
+    setAllocations((current) => upsertLine(current, item, quantity))
+    setToast(`Saved ${item.productName} to the local draft cart.`)
+  }
 
-    setAllocations((current) => [record, ...current.filter((allocation) => allocation.reportId !== record.reportId || allocation.agencyId !== record.agencyId)])
-    setToast(`Saved allocation for ${agencyName}.`)
+  const acceptItem = (item: SapReportItem) => {
+    if (!selectedReport || reportIsFinalized || item.decision === 'REJECTED') return
+    const quantity = getQuantity(item)
+    if (!isValidQuantity(item, quantity)) {
+      setToast('Enter a whole-number allocation within the requested quantity and remaining stock.')
+      return
+    }
+    const decidedAt = new Date().toISOString()
+    setAllocations((current) => upsertLine(current, item, quantity))
+    setReports((current) => current.map((report) => {
+      if (report.id !== selectedReport.id) return report
+      const items = report.items.map((entry) => entry.id === item.id
+        ? { ...entry, decision: 'ACCEPTED' as const, allocatedQuantity: quantity, rejectionReason: undefined }
+        : entry)
+      const decisionHistory = [...report.decisionHistory, {
+        id: `${Date.now()}-${item.id}`,
+        subject: `${item.productName} (${item.agencyName})`,
+        action: 'Item accepted',
+        decisionMaker: profileName,
+        decidedAt,
+      }]
+      return { ...report, items, decisionHistory, status: getSapStatus(items, true), reviewStarted: true }
+    }))
+    setToast(`${item.productName} accepted.`)
+  }
+
+  const removeDraftItem = (item: SapReportItem) => {
+    if (!selectedReport || reportIsFinalized) return
+    const decidedAt = new Date().toISOString()
+    setAllocations((current) => current.map((allocation) => allocation.reportId === selectedReport.id
+      ? { ...allocation, lines: allocation.lines.filter((line) => line.itemId !== item.id) }
+      : allocation).filter((allocation) => allocation.reportId !== selectedReport.id || allocation.lines.length > 0))
+    setReports((current) => current.map((report) => {
+      if (report.id !== selectedReport.id) return report
+      const items = report.items.map((entry) => entry.id === item.id && entry.decision === 'ACCEPTED'
+        ? { ...entry, decision: 'PENDING' as const, allocatedQuantity: undefined }
+        : entry)
+      const decisionHistory = [...report.decisionHistory, {
+        id: `${Date.now()}-${item.id}`,
+        subject: `${item.productName} (${item.agencyName})`,
+        action: 'Draft allocation removed; no rejection recorded',
+        decisionMaker: profileName,
+        decidedAt,
+      }]
+      return { ...report, items, decisionHistory, status: getSapStatus(items, true), reviewStarted: true }
+    }))
+    setToast('Removed the draft allocation. No rejection was recorded.')
+  }
+
+  const clearDraft = () => {
+    if (!selectedReport || reportIsFinalized) return
+    if (!window.confirm('Remove all draft allocations for this SAP report? Accepted draft items will return to pending review; rejected decisions will remain recorded.')) return
+    const decidedAt = new Date().toISOString()
+    setAllocations((current) => current.filter((allocation) => allocation.reportId !== selectedReport.id || allocation.status !== 'Draft'))
+    setReports((current) => current.map((report) => {
+      if (report.id !== selectedReport.id) return report
+      const items = report.items.map((item) => item.decision === 'ACCEPTED'
+        ? { ...item, decision: 'PENDING' as const, allocatedQuantity: undefined }
+        : item)
+      const decisionHistory = [...report.decisionHistory, {
+        id: `${Date.now()}-clear`,
+        subject: report.fileName,
+        action: 'Draft report allocation cleared; no rejection recorded',
+        decisionMaker: profileName,
+        decidedAt,
+      }]
+      return { ...report, items, decisionHistory, status: getSapStatus(items, true), reviewStarted: true }
+    }))
+    setToast('Cleared the report draft cart. Rejections were preserved.')
+  }
+
+  const acceptAllEligible = () => {
+    if (!selectedReport || reportIsFinalized) return
+    const remaining = new Map(inventory.map((stock) => [
+      stock.productId,
+      stock.available - allocations.flatMap((allocation) => allocation.reportId === selectedReport.id ? [] : allocation.lines)
+        .filter((line) => line.productId === stock.productId)
+        .reduce((total, line) => total + line.allocated, 0),
+    ]))
+    const acceptedItems: { item: SapReportItem; quantity: number }[] = []
+    selectedReport.items.forEach((item) => {
+      if (item.decision === 'REJECTED') return
+      const left = remaining.get(item.productId) ?? 0
+      const saved = savedLineForItem(item.id)
+      const quantity = item.decision === 'ACCEPTED'
+        ? (item.allocatedQuantity ?? saved?.allocated ?? 0)
+        : (saved?.allocated ?? Math.min(item.quantity, left))
+      if (!isValidQuantity(item, quantity) || quantity > left) return
+      acceptedItems.push({ item, quantity })
+      remaining.set(item.productId, left - quantity)
+    })
+    if (!acceptedItems.length) {
+      setToast('No eligible items have valid quantities within available stock.')
+      return
+    }
+    const decidedAt = new Date().toISOString()
+    setAllocations((current) => acceptedItems.reduce((next, entry) => upsertLine(next, entry.item, entry.quantity), current))
+    setReports((current) => current.map((report) => {
+      if (report.id !== selectedReport.id) return report
+      const acceptedIds = new Set(acceptedItems.map(({ item }) => item.id))
+      const items = report.items.map((item) => acceptedIds.has(item.id)
+        ? { ...item, decision: 'ACCEPTED' as const, allocatedQuantity: acceptedItems.find((entry) => entry.item.id === item.id)?.quantity, rejectionReason: undefined }
+        : item)
+      const history = acceptedItems.map(({ item }) => ({
+        id: `${Date.now()}-${item.id}`,
+        subject: `${item.productName} (${item.agencyName})`,
+        action: 'Item accepted by report-level review',
+        decisionMaker: profileName,
+        decidedAt,
+      }))
+      return { ...report, items, decisionHistory: [...report.decisionHistory, ...history], status: getSapStatus(items, true), reviewStarted: true }
+    }))
+    setToast(`Accepted ${acceptedItems.length} eligible item${acceptedItems.length === 1 ? '' : 's'}.`)
+  }
+
+  const openRejection = (target: RejectionTarget) => {
+    setRejectionTarget(target)
+    setRejectionReason('')
+    setCustomReason('')
+  }
+
+  const confirmRejection = () => {
+    if (!selectedReport || !rejectionTarget || reportIsFinalized) return
+    const reason = rejectionReason === 'Other' ? customReason.trim() : rejectionReason
+    if (!reason) {
+      setToast('Select a rejection reason and provide a custom reason when needed.')
+      return
+    }
+    const decidedAt = new Date().toISOString()
+    const isReportRejection = rejectionTarget.scope === 'report'
+    const item = isReportRejection ? undefined : selectedReport.items.find((entry) => entry.id === rejectionTarget.itemId)
+    const subject = isReportRejection ? selectedReport.fileName : `${item?.productName ?? 'Requested item'} (${item?.agencyName ?? 'Agency'})`
+    setAllocations((current) => current.map((allocation) => allocation.reportId === selectedReport.id
+      ? { ...allocation, lines: allocation.lines.filter((line) => isReportRejection || line.itemId !== item?.id) }
+      : allocation).filter((allocation) => allocation.reportId !== selectedReport.id || allocation.lines.length > 0))
+    setReports((current) => current.map((report) => {
+      if (report.id !== selectedReport.id) return report
+      const items = report.items.map((entry) => {
+        const affected = isReportRejection || entry.id === item?.id
+        return affected
+          ? { ...entry, decision: 'REJECTED' as const, allocatedQuantity: undefined, rejectionReason: reason }
+          : entry
+      })
+      const decisionHistory = [...report.decisionHistory, {
+        id: `${Date.now()}-reject`,
+        subject,
+        action: isReportRejection ? 'Entire report rejected' : 'Item rejected',
+        reason,
+        decisionMaker: profileName,
+        decidedAt,
+      }]
+      return { ...report, items, decisionHistory, status: getSapStatus(items, true), reviewStarted: true }
+    }))
+    setNotifications((current) => [{
+      id: `notification-${Date.now()}`,
+      title: isReportRejection ? 'SAP report rejected' : 'SAP request item rejected',
+      detail: `${subject} was rejected. Reason: ${reason}. No message was sent to the agency.`,
+      time: new Date().toLocaleString(),
+      unread: true,
+    }, ...current])
+    setRejectionTarget(null)
+    setRejectionReason('')
+    setCustomReason('')
+    setToast('Rejection recorded. No message was sent to the agency.')
+  }
+
+  const cartTotal = reportLines.reduce((total, line) => total + line.allocated, 0)
+  const acceptedItems = selectedReport?.items.filter((item) => item.decision === 'ACCEPTED') ?? []
+  const allocationsFitStock = selectedReport?.items.every((item) => {
+    if (item.decision !== 'ACCEPTED') return true
+    const line = savedLineForItem(item.id)
+    return Boolean(line && line.allocated === item.allocatedQuantity && isValidQuantity(item, line.allocated))
+  }) ?? false
+  const isAllocationReady = Boolean(selectedReport && selectedReport.items.length > 0 && acceptedItems.length > 0
+    && selectedReport.items.every((item) => item.decision !== 'PENDING')
+    && allocationsFitStock && !reportIsFinalized)
+
+  const finalizeAllocation = () => {
+    if (!selectedReport || !isAllocationReady) return
+    if (!window.confirm('Finalize this reviewed allocation and open the Warehouse Handover report? No warehouse message will be sent.')) return
+    setAllocations((current) => current.map((allocation) => allocation.reportId === selectedReport.id && allocation.status === 'Draft'
+      ? { ...allocation, status: 'Ready for Handover' }
+      : allocation))
+    setToast('Allocation finalized. No warehouse message was sent.')
+    onNavigate('handover')
   }
 
   return (
     <div className="page-stack">
       <section className="panel">
-        <div className="panel-heading split"><h2>Agency stock allocation</h2><select value={selectedReportId} onChange={(event) => setSelectedReportId(event.target.value)}>{reports.map((report) => <option value={report.id} key={report.id}>{report.fileName}</option>)}</select></div>
+        <div className="panel-heading split">
+          <h2>Review SAP report items</h2>
+          <select value={selectedReportId} onChange={(event) => setSelectedReportId(event.target.value)}>{reports.map((report) => <option value={report.id} key={report.id}>{report.fileName}</option>)}</select>
+        </div>
+        {selectedReport ? (
+          <>
+            <div className="allocation-report-summary">
+              <span><strong>Report status</strong> {getSapStatusLabel(selectedReport.status)}</span>
+              <span><strong>Saved draft items</strong> {reportLines.length}</span>
+              <span><strong>Draft quantity</strong> {formatNumber(cartTotal)}</span>
+            </div>
+            <div className="allocation-report-actions">
+              <button type="button" className="secondary-button" onClick={acceptAllEligible} disabled={reportIsFinalized || !selectedReport.items.some((item) => item.decision !== 'REJECTED')}>Accept all eligible</button>
+              <button type="button" className="secondary-button" onClick={() => openRejection({ scope: 'report' })} disabled={reportIsFinalized || selectedReport.items.length === 0}>Reject entire report</button>
+            </div>
+          </>
+        ) : null}
       </section>
 
-      {selectedReport && Object.entries(groups).length ? Object.entries(groups).map(([agencyId, items]) => {
-        const agencyName = items[0].agencyName
-        return (
-          <section className="panel" key={agencyId}>
-            <div className="panel-heading split"><h2>{agencyName}</h2><button type="button" className="primary-button" onClick={() => saveForAgency(agencyId)}>Save allocation</button></div>
-            <div className="allocation-grid">
-              {items.map((item, itemIndex) => {
-                const stock = inventory.find((entry) => entry.productId === item.productId)
-                const savedLine = getSavedAllocation(agencyId)?.lines[itemIndex]
-                const savedValue = savedLine?.productId === item.productId ? savedLine.allocated : item.quantity
-                const allocated = Number(draftValues[agencyId]?.[item.id] ?? savedValue)
-                const invalid = !Number.isSafeInteger(allocated) || allocated < 0 || allocated > item.quantity || allocated > (stock?.available ?? 0)
+      {selectedReport?.items.length ? (
+        <section className="panel">
+          <div className="panel-heading"><h2>Requested items and decisions</h2></div>
+          <div className="table-wrapper">
+            <table className="allocation-decision-table">
+              <thead><tr><th>Agency / product</th><th>Requested</th><th>Available</th><th>Allocate</th><th>Decision</th><th>Actions</th></tr></thead>
+              <tbody>{selectedReport.items.map((item) => {
+                const saved = savedLineForItem(item.id)
+                const quantity = getQuantity(item)
+                const valid = isValidQuantity(item, quantity)
+                const locked = reportIsFinalized || item.decision === 'REJECTED'
                 return (
-                  <div key={item.id} className={`allocation-card ${invalid ? 'invalid' : ''}`}>
-                    <div className="allocation-head"><strong>{item.productName}</strong><span>{stock ? `${formatNumber(stock.available)} available` : 'No stock'}</span></div>
-                    <small>Requested {formatNumber(item.quantity)} · Contact {item.contact}</small>
-                    <label>Allocated quantity<input type="number" value={allocated} min={0} max={item.quantity} onChange={(event) => updateDraft(agencyId, item.id, event.target.value)} /></label>
-                  </div>
+                  <tr key={item.id}>
+                    <td><strong>{item.productName}</strong><small>{item.agencyName} · {item.productId}</small>{item.rejectionReason ? <small className="rejection-reason">{item.rejectionReason}</small> : null}</td>
+                    <td>{formatNumber(item.quantity)}</td>
+                    <td>{formatNumber(availableForItem(item))}</td>
+                    <td><input aria-label={`Allocated quantity for ${item.productName}`} className="allocation-quantity-input" type="number" min={1} max={Math.min(item.quantity, availableForItem(item))} step={1} value={draftValues[item.id] ?? saved?.allocated ?? item.allocatedQuantity ?? item.quantity} disabled={locked || item.decision === 'ACCEPTED'} onChange={(event) => setDraftValues((current) => ({ ...current, [item.id]: event.target.value }))} /></td>
+                    <td>{getSapStatusLabel(item.decision)}{saved ? <small className="saved-draft-label">In draft cart</small> : null}</td>
+                    <td>
+                      <div className="table-actions allocation-item-actions">
+                        {item.decision === 'PENDING' ? <button type="button" className="secondary-button" disabled={locked || !valid} onClick={() => saveDraft(item)}>Save draft</button> : null}
+                        {item.decision === 'PENDING' ? <button type="button" className="primary-button" disabled={locked || !valid} onClick={() => acceptItem(item)}>Accept</button> : null}
+                        {item.decision !== 'REJECTED' ? <button type="button" className="secondary-button" disabled={locked} onClick={() => openRejection({ scope: 'item', itemId: item.id })}>Reject</button> : null}
+                        {saved && !reportIsFinalized ? <button type="button" className="link-button danger" onClick={() => removeDraftItem(item)}>Remove draft</button> : null}
+                      </div>
+                    </td>
+                  </tr>
                 )
-              })}
-            </div>
-          </section>
-        )
-      }) : <section className="panel"><p className="empty-text">No agency allocation groups are available for the selected SAP report.</p></section>}
+              })}</tbody>
+            </table>
+          </div>
+        </section>
+      ) : <section className="panel"><p className="empty-text">No requested items are available for the selected SAP report.</p></section>}
+
+      <section className="panel">
+        <div className="panel-heading split">
+          <h2>Saved allocation cart</h2>
+          <button type="button" className="secondary-button" onClick={clearDraft} disabled={!reportLines.length || reportIsFinalized}>Clear report draft</button>
+        </div>
+        {reportLines.length ? (
+          <div className="table-wrapper"><table><thead><tr><th>Agency</th><th>Product</th><th>Requested</th><th>Allocated</th><th>Action</th></tr></thead><tbody>{reportLines.map((line) => {
+            const item = selectedReport?.items.find((entry) => entry.id === line.itemId)
+            return <tr key={line.itemId}><td>{line.agencyName}</td><td>{line.productName}<small>{line.productId}</small></td><td>{formatNumber(line.requested)}</td><td>{formatNumber(line.allocated)}</td><td>{item && !reportIsFinalized ? <button type="button" className="link-button danger" onClick={() => removeDraftItem(item)}>Remove item</button> : <span>{reportAllocations.find((allocation) => allocation.status !== 'Draft')?.status ?? ''}</span>}</td></tr>
+          })}</tbody></table></div>
+        ) : <p className="empty-text">No saved draft items. Save an allocation quantity to add it to the cart.</p>}
+      </section>
 
       <div className="allocation-navigation">
         <button type="button" className="secondary-button" onClick={() => onNavigate('sap-reports')}>Back to SAP Reports</button>
         <div>
-          {!isAllocationReady && <span className="allocation-navigation-hint">Save valid allocations for each agency to continue.</span>}
-          <button type="button" className="primary-button allocation-proceed-button" disabled={!isAllocationReady} onClick={() => onNavigate('handover')}>Proceed to Warehouse Handover</button>
+          {!isAllocationReady && <span className="allocation-navigation-hint">Resolve every requested item and save valid accepted quantities before finalizing.</span>}
+          <button type="button" className="primary-button allocation-proceed-button" disabled={!isAllocationReady} onClick={finalizeAllocation}>Finalize &amp; Proceed to Warehouse Handover</button>
         </div>
       </div>
+
+      {rejectionTarget ? (
+        <div className="modal-backdrop" role="presentation">
+          <section className="decision-modal" role="dialog" aria-modal="true" aria-labelledby="rejection-modal-title">
+            <div className="panel-heading"><h2 id="rejection-modal-title">Confirm rejection</h2></div>
+            <p><strong>Scope:</strong> {rejectionTarget.scope === 'report' ? `Entire SAP report — ${selectedReport?.fileName ?? ''}` : 'Individual requested item'}</p>
+            {rejectionTarget.scope === 'item' ? (() => {
+              const item = selectedReport?.items.find((entry) => entry.id === rejectionTarget.itemId)
+              return item ? <p><strong>Product:</strong> {item.productName} · <strong>Requested:</strong> {formatNumber(item.quantity)}</p> : null
+            })() : null}
+            <label>Rejection reason
+              <select value={rejectionReason} onChange={(event) => setRejectionReason(event.target.value)}>
+                <option value="">Select a reason</option>
+                <option>Insufficient available stock</option>
+                <option>Requested quantity exceeds available stock</option>
+                <option>Invalid product request</option>
+                <option>Stock allocation not possible</option>
+                <option value="Other">Other (custom reason)</option>
+              </select>
+            </label>
+            {rejectionReason === 'Other' ? <label>Custom reason<textarea rows={3} value={customReason} onChange={(event) => setCustomReason(event.target.value)} placeholder="Enter the reason for rejection" /></label> : null}
+            <p className="decision-modal-note">A notification record will be added here; no message will be sent to the Agency.</p>
+            <div className="decision-modal-actions">
+              <button type="button" className="secondary-button" onClick={() => setRejectionTarget(null)}>Cancel</button>
+              <button type="button" className="primary-button" onClick={confirmRejection}>Confirm rejection</button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -918,8 +1235,8 @@ function StockMovementPage({ movements }: { movements: StockMovement[] }) {
   )
 }
 
-function HandoverPage({ allocations, setToast, onNavigate }: { allocations: AllocationRecord[]; setToast: (message: string) => void; onNavigate: (page: WorkspacePage) => void }) {
-  const pendingAllocations = allocations.filter((allocation) => allocation.status !== 'Completed')
+function HandoverPage({ allocations, setAllocations, setToast, onNavigate }: { allocations: AllocationRecord[]; setAllocations: React.Dispatch<React.SetStateAction<AllocationRecord[]>>; setToast: (message: string) => void; onNavigate: (page: WorkspacePage) => void }) {
+  const pendingAllocations = allocations.filter((allocation) => allocation.status === 'Ready for Handover')
   const consolidatedProducts = new Map<string, { productId: string; productName: string; allocated: number; references: Set<string> }>()
   pendingAllocations.forEach((allocation) => {
     allocation.lines.forEach((line) => {
@@ -944,10 +1261,14 @@ function HandoverPage({ allocations, setToast, onNavigate }: { allocations: Allo
       setToast('There are no valid allocated products to hand over.')
       return
     }
-    if (!window.confirm(`Confirm sending the consolidated handover report containing ${reportLines.length} products (${formatNumber(totalAllocated)} units) to Warehouse Admin?`)) {
+    if (!window.confirm(`Mark the consolidated handover report containing ${reportLines.length} products (${formatNumber(totalAllocated)} units) as complete? No warehouse message will be sent.`)) {
       return
     }
-    setToast('Handover was not sent: no Warehouse Admin handover API is configured. The report status remains Not sent.')
+    const reportIds = new Set(pendingAllocations.map((allocation) => allocation.id))
+    setAllocations((current) => current.map((allocation) => reportIds.has(allocation.id)
+      ? { ...allocation, status: 'Completed' }
+      : allocation))
+    setToast('Demo handover marked complete locally. Nothing was sent to a warehouse.')
   }
 
   return (
@@ -959,7 +1280,7 @@ function HandoverPage({ allocations, setToast, onNavigate }: { allocations: Allo
           <div><dt>Report Date</dt><dd>{reportDate}</dd></div>
           <div><dt>Related SAP / Allocation References</dt><dd>{pendingAllocations.length ? pendingAllocations.map((allocation) => `${allocation.reportName} / ${allocation.id}`).join('; ') : 'None'}</dd></div>
           <div><dt>Total Allocated Items</dt><dd>{reportLines.length} products · {formatNumber(totalAllocated)} units</dd></div>
-          <div><dt>Current Handover Status</dt><dd>Not sent</dd></div>
+          <div><dt>Current Handover Status</dt><dd>{pendingAllocations.length ? 'Ready for Handover' : 'No finalized allocation'}</dd></div>
         </dl>
         <div className="table-wrapper">
           <table>
@@ -977,7 +1298,6 @@ function HandoverPage({ allocations, setToast, onNavigate }: { allocations: Allo
             </tbody>
           </table>
         </div>
-        <p className="handover-api-notice">Warehouse submission is unavailable because no handover API is configured. Confirming will not send or change any records.</p>
         <div className="handover-report-actions">
           <button type="button" className="secondary-button" onClick={() => onNavigate('stock-allocation')}>Back to Stock Allocation</button>
           <button type="button" className="primary-button" disabled={reportLines.length === 0} onClick={handleSendToWarehouse}>Send to Warehouse</button>
@@ -989,7 +1309,7 @@ function HandoverPage({ allocations, setToast, onNavigate }: { allocations: Allo
 
 function ReportsPage({ reports, allocations, inventory, movements }: { reports: SapReport[]; allocations: AllocationRecord[]; inventory: InventoryItem[]; movements: StockMovement[] }) {
   const totalAvailable = inventory.reduce((sum, item) => sum + item.available, 0)
-  const pendingReports = reports.filter((report) => report.status === 'Pending Review').length
+  const pendingReports = reports.filter((report) => report.status === 'PENDING').length
 
   return (
     <div className="page-stack">
