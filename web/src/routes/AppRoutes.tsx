@@ -1,9 +1,9 @@
 import { Navigate, Routes, Route } from "react-router";
-import SignInPage from "../pages/signInPage";
-import Dashboard from "../pages/Dashboard";
-import Dispatches from "../pages/Dispatches";
-import AgencyLayout from "../components/AgencyLayout";
-import ComingSoon from "../pages/ComingSoon";
+import SignInPage from "../features/agency/pages/SignInPage";
+import Dashboard from "../features/agency/pages/Dashboard";
+import Dispatches from "../features/agency/pages/Dispatches";
+import AgencyLayout from "../features/agency/components/AgencyLayout";
+import ComingSoon from "../features/agency/pages/ComingSoon";
 
 function AppRoutes() {
   return (
