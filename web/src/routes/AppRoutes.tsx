@@ -1,37 +1,20 @@
-import { Navigate, Routes, Route } from "react-router";
-import SignInPage from "../features/agency/pages/SignInPage";
-import Dashboard from "../features/agency/pages/Dashboard";
-import Dispatches from "../features/agency/pages/Dispatches";
-import AgencyLayout from "../features/agency/components/AgencyLayout";
-import ComingSoon from "../features/agency/pages/ComingSoon";
+import { Routes, Route } from "react-router";
+import { adminRoutes } from "../features/admin/routes";
+import { manufacturerRoutes } from "../features/manufacturer/routes";
+import { warehouseRoutes } from "../features/warehouse/routes";
+import { agencyRoutes } from "../features/agency/routes";
 
+// Central router. Don't edit this file to add screens;
+// add them to your own features/<role>/routes.tsx instead.
 function AppRoutes() {
   return (
-    <div>
-      <Routes>
-        <Route path="/" element={<Navigate to="/signin" replace />} />
-        <Route path="/signin" element={<SignInPage />} />
-
-        <Route path="/agency" element={<AgencyLayout />}>
-          <Route index element={<Navigate to="dashboard" replace />} />
-          <Route path="dashboard" element={<Dashboard />} />
-          <Route path="dispatches" element={<Dispatches />} />
-        </Route>
-        <Route path="*" element={<Navigate to="/signin" replace />} />
-        <Route path="/agency" element={<AgencyLayout />}>
-          <Route index element={<Navigate to="dashboard" replace />} />
-          <Route path="dashboard" element={<Dashboard />} />
-          <Route path="dispatches" element={<Dispatches />} />
-          <Route path="inventory" element={<ComingSoon />} />
-          <Route path="trips" element={<ComingSoon />} />
-          <Route path="monitoring" element={<ComingSoon />} />
-          <Route path="fleet" element={<ComingSoon />} />
-          <Route path="outlets" element={<ComingSoon />} />
-          <Route path="orders" element={<ComingSoon />} />
-          <Route path="settings" element={<ComingSoon />} />
-        </Route>
-      </Routes>
-    </div>
+    <Routes>
+      <Route path="/" element={<h1>NexusFlow</h1>} />
+      {adminRoutes}
+      {manufacturerRoutes}
+      {warehouseRoutes}
+      {agencyRoutes}
+    </Routes>
   );
 }
 
